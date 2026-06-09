@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Infinite Plane | Heavy Sniper (Shake, Recoil, Speed)</title>
+    <title>Infinite Plane | Sword & Pistol Enemies, Dodging, Melee</title>
     <style>
         body {
             margin: 0;
@@ -164,6 +164,24 @@
             box-shadow: 0 0 15px rgba(0,0,0,0.5);
             touch-action: manipulation;
         }
+
+        #spawnSwordButton {
+            position: fixed;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 14px 28px;
+            font-size: 1rem;
+            font-weight: bold;
+            color: white;
+            background: #ff5722;
+            border: 3px solid white;
+            border-radius: 30px;
+            cursor: pointer;
+            z-index: 100;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            touch-action: manipulation;
+        }
     </style>
 </head>
 <body>
@@ -176,7 +194,8 @@
     <div id="skillThumb"></div>
     <button id="dashButton">DASH</button>
     <button id="pickupButton">PICK UP</button>
-    <button id="spawnButton">SPAWN ENEMY</button>
+    <button id="spawnButton">SPAWN PISTOL</button>
+    <button id="spawnSwordButton">SPAWN SWORD</button>
 
     <script>
         (function() {
@@ -185,6 +204,7 @@
             const dashButton = document.getElementById('dashButton');
             const pickupButton = document.getElementById('pickupButton');
             const spawnButton = document.getElementById('spawnButton');
+            const spawnSwordButton = document.getElementById('spawnSwordButton');
             const moveBaseEl = document.getElementById('moveBase');
             const moveThumbEl = document.getElementById('moveThumb');
             const shootBaseEl = document.getElementById('shootBase');
@@ -202,7 +222,7 @@
 
             // --- Infinite world camera ---
             let cameraOffsetX = 0, cameraOffsetY = 0;
-            const CAMERA_FOLLOW_SPEED = 1.5; // soft pull
+            const CAMERA_FOLLOW_SPEED = 1.5;
 
             // --- Player ---
             const player = {
@@ -229,7 +249,6 @@
 
             const pistolState = { ammo: 12, maxAmmo: 12, spare: 20, reloadTime: 1.2, fireRate: 0.45, bulletSpeed: 600, damage: 10 };
             const shotgunState = { ammo: 8, maxAmmo: 8, spare: 20, reloadTime: 1.8, pellets: 8, spreadAngle: Math.PI / 9, bulletSpeed: 500, damage: 8, recoilForce: 400 };
-            // Sniper now has massive recoil, extreme bullet speed, and stronger shake
             const sniperState = { ammo: 5, maxAmmo: 5, spare: 10, reloadTime: 2.0, fireRate: 1.5, bulletSpeed: 3000, damage: 35, recoilForce: 600 };
 
             let isReloading = false, reloadTimer = 0;
@@ -628,7 +647,7 @@
                 }
             }
 
-            // ========== Firing functions ==========
+            // ========== Firing functions (with source weapon tag) ==========
             function firePistol(now) {
                 const state = pistolState;
                 if (isReloading || state.ammo <= 0) { if (state.ammo === 0) startReload(); return false; }
@@ -637,7 +656,7 @@
                 const mag = Math.hypot(shootVec.x, shootVec.y);
                 const vx = (shootVec.x / mag) * state.bulletSpeed;
                 const vy = (shootVec.y / mag) * state.bulletSpeed;
-                playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx, vy, radius: 5, damage: state.damage, isBeam: false });
+                playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx, vy, radius: 5, damage: state.damage, isBeam: false, sourceWeapon: 'pistol' });
                 state.ammo--;
                 lastFireTime = now;
                 if (state.ammo === 0) startReload();
@@ -652,7 +671,7 @@
                 for (let i = 0; i < state.pellets; i++) {
                     const angle = Math.atan2(dirY, dirX) + (Math.random()*2-1)*state.spreadAngle;
                     const speed = state.bulletSpeed + (Math.random()*100-50);
-                    playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 3, damage: state.damage, isBeam: false });
+                    playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 3, damage: state.damage, isBeam: false, sourceWeapon: 'shotgun' });
                 }
                 state.ammo--;
                 recoilVelX = -dirX * state.recoilForce;
@@ -668,17 +687,12 @@
                 const fireAngle = baseAngle + sniperAimAngle;
                 const vx = Math.cos(fireAngle) * state.bulletSpeed;
                 const vy = Math.sin(fireAngle) * state.bulletSpeed;
-                playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx, vy, radius: 4, damage: state.damage, isBeam: true });
+                playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx, vy, radius: 4, damage: state.damage, isBeam: true, sourceWeapon: 'sniper' });
                 state.ammo--;
-
-                // Heavy recoil opposite to fire direction
                 recoilVelX = -Math.cos(fireAngle) * state.recoilForce;
                 recoilVelY = -Math.sin(fireAngle) * state.recoilForce;
-
-                // Increased screen shake: stronger and longer
                 screenShake = 14;
                 shakeDuration = 0.28;
-
                 lastFireTime = performance.now();
                 if (state.ammo === 0) startReload();
             }
@@ -692,7 +706,7 @@
                 for (let i = 0; i < bulletCount; i++) {
                     const angle = (i / bulletCount) * Math.PI * 2;
                     const speed = shotgunState.bulletSpeed;
-                    playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 4, damage: shotgunState.damage * 0.7, isBeam: false });
+                    playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 4, damage: shotgunState.damage * 0.7, isBeam: false, sourceWeapon: 'shotgun' });
                 }
                 screenShake = 10;
                 shakeDuration = 0.3;
@@ -700,8 +714,8 @@
                 skillCooldown = skillCooldownDuration;
             }
 
-            // ========== Enemy logic ==========
-            function spawnEnemy() {
+            // ========== Enemy spawning ==========
+            function spawnPistolEnemy() {
                 let worldX, worldY, valid;
                 do {
                     worldX = player.worldX + (Math.random() - 0.5) * 800;
@@ -715,39 +729,141 @@
                     }
                 } while (!valid);
                 enemies.push({
+                    type: 'pistol',
                     worldX, worldY,
                     radius: 18,
                     health: 50,
                     speed: 120,
                     fireRate: 0.6,
                     lastFire: performance.now(),
-                    damage: pistolState.damage
+                    damage: pistolState.damage,
+                    visionRange: 400
                 });
             }
-            spawnButton.addEventListener('pointerdown', (e) => { e.preventDefault(); spawnEnemy(); });
-            spawnButton.addEventListener('touchstart', (e) => { e.preventDefault(); spawnEnemy(); });
 
+            function spawnSwordEnemy() {
+                let worldX, worldY, valid;
+                do {
+                    worldX = player.worldX + (Math.random() - 0.5) * 800;
+                    worldY = player.worldY + (Math.random() - 0.5) * 800;
+                    valid = true;
+                    if (Math.hypot(worldX - player.worldX, worldY - player.worldY) < 200) valid = false;
+                    for (const house of houses) {
+                        for (const rect of house) {
+                            if (worldX > rect.x - 20 && worldX < rect.x + rect.w + 20 && worldY > rect.y - 20 && worldY < rect.y + rect.h + 20) valid = false;
+                        }
+                    }
+                } while (!valid);
+                enemies.push({
+                    type: 'sword',
+                    worldX, worldY,
+                    radius: 25,           // bigger than pistol
+                    health: 80,
+                    speed: 150,
+                    meleeDamage: 30,
+                    meleeCooldown: 0.5,  // seconds between melee hits
+                    lastMelee: 0,
+                    dodging: false,
+                    dodgeTimer: 0,
+                    dodgeCooldown: 0,
+                    dodgeSpeed: 350,
+                    dodgeDirection: { x: 0, y: 0 }
+                });
+            }
+
+            spawnButton.addEventListener('pointerdown', (e) => { e.preventDefault(); spawnPistolEnemy(); });
+            spawnButton.addEventListener('touchstart', (e) => { e.preventDefault(); spawnPistolEnemy(); });
+            spawnSwordButton.addEventListener('pointerdown', (e) => { e.preventDefault(); spawnSwordEnemy(); });
+            spawnSwordButton.addEventListener('touchstart', (e) => { e.preventDefault(); spawnSwordEnemy(); });
+
+            // ========== Enemy AI ==========
             function updateEnemies(now, dt) {
                 for (const enemy of enemies) {
                     const dx = player.worldX - enemy.worldX;
                     const dy = player.worldY - enemy.worldY;
                     const dist = Math.hypot(dx, dy);
-                    const minDist = 150;
-                    if (dist > minDist + 5) {
-                        const angle = Math.atan2(dy, dx);
-                        enemy.worldX += Math.cos(angle) * enemy.speed * dt;
-                        enemy.worldY += Math.sin(angle) * enemy.speed * dt;
-                    }
-                    resolveHouseCollisions(enemy);
-                    if (now - enemy.lastFire > enemy.fireRate * 1000) {
-                        const a = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
-                        enemyBullets.push({
-                            worldX: enemy.worldX, worldY: enemy.worldY,
-                            vx: Math.cos(a) * pistolState.bulletSpeed,
-                            vy: Math.sin(a) * pistolState.bulletSpeed,
-                            radius: 4, damage: enemy.damage
-                        });
-                        enemy.lastFire = now;
+
+                    if (enemy.type === 'pistol') {
+                        // Move towards player until minDist
+                        const minDist = 150;
+                        if (dist > minDist + 5) {
+                            const angle = Math.atan2(dy, dx);
+                            enemy.worldX += Math.cos(angle) * enemy.speed * dt;
+                            enemy.worldY += Math.sin(angle) * enemy.speed * dt;
+                        }
+                        resolveHouseCollisions(enemy);
+                        // Shoot only if within vision range
+                        if (dist < enemy.visionRange && now - enemy.lastFire > enemy.fireRate * 1000) {
+                            const a = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
+                            enemyBullets.push({
+                                worldX: enemy.worldX, worldY: enemy.worldY,
+                                vx: Math.cos(a) * pistolState.bulletSpeed,
+                                vy: Math.sin(a) * pistolState.bulletSpeed,
+                                radius: 4, damage: enemy.damage
+                            });
+                            enemy.lastFire = now;
+                        }
+                    } else if (enemy.type === 'sword') {
+                        // Dodge logic
+                        if (!enemy.dodging && enemy.dodgeCooldown <= 0) {
+                            // Check for nearby shotgun bullets to dodge
+                            for (const b of playerBullets) {
+                                if (b.sourceWeapon === 'shotgun') {
+                                    const bDist = Math.hypot(enemy.worldX - b.worldX, enemy.worldY - b.worldY);
+                                    // If bullet is within a detection radius (larger than enemy radius)
+                                    if (bDist < enemy.radius * 3) {
+                                        // Start dodge
+                                        enemy.dodging = true;
+                                        enemy.dodgeTimer = 0.25; // seconds
+                                        // Choose random perpendicular direction
+                                        const perpX = -b.vy, perpY = b.vx;
+                                        const len = Math.hypot(perpX, perpY);
+                                        if (len > 0) {
+                                            const sign = Math.random() < 0.5 ? 1 : -1;
+                                            enemy.dodgeDirection.x = (perpX / len) * sign;
+                                            enemy.dodgeDirection.y = (perpY / len) * sign;
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Update dodge state
+                        if (enemy.dodging) {
+                            enemy.dodgeTimer -= dt;
+                            if (enemy.dodgeTimer <= 0) {
+                                enemy.dodging = false;
+                                enemy.dodgeCooldown = 0.8; // cooldown after dodge
+                            } else {
+                                // Move in dodge direction
+                                enemy.worldX += enemy.dodgeDirection.x * enemy.dodgeSpeed * dt;
+                                enemy.worldY += enemy.dodgeDirection.y * enemy.dodgeSpeed * dt;
+                            }
+                        } else {
+                            // Normal movement: rush towards player
+                            if (dist > 10) { // if not already touching, move closer
+                                const angle = Math.atan2(dy, dx);
+                                enemy.worldX += Math.cos(angle) * enemy.speed * dt;
+                                enemy.worldY += Math.sin(angle) * enemy.speed * dt;
+                            }
+                        }
+
+                        // Cooldown
+                        if (enemy.dodgeCooldown > 0) enemy.dodgeCooldown -= dt;
+
+                        resolveHouseCollisions(enemy);
+
+                        // Melee damage
+                        if (dist < player.radius + enemy.radius && now - (enemy.lastMelee || 0) > enemy.meleeCooldown * 1000) {
+                            player.health -= enemy.meleeDamage;
+                            enemy.lastMelee = now;
+                            // Push player back slightly
+                            const angle = Math.atan2(dy, dx);
+                            const pushForce = 200;
+                            recoilVelX -= Math.cos(angle) * pushForce;
+                            recoilVelY -= Math.sin(angle) * pushForce;
+                        }
                     }
                 }
             }
@@ -783,7 +899,7 @@
                     if (reloadTimer <= 0) finishReload();
                 }
 
-                // Recoil decay (normal)
+                // Recoil decay
                 const moveActive = moveVec.x !== 0 || moveVec.y !== 0;
                 const decayRate = moveActive ? 0.8 : 3.0;
                 recoilVelX *= Math.exp(-decayRate * dt);
@@ -849,6 +965,16 @@
                     for (let j = enemies.length - 1; j >= 0; j--) {
                         const e = enemies[j];
                         if (Math.hypot(b.worldX - e.worldX, b.worldY - e.worldY) < e.radius + b.radius) {
+                            // Sword enemy cannot dodge if player is inside its radius
+                            if (e.type === 'sword') {
+                                const distToPlayer = Math.hypot(player.worldX - e.worldX, player.worldY - e.worldY);
+                                if (distToPlayer <= e.radius + player.radius) {
+                                    // player inside melee range → bullet always hits
+                                } else if (b.sourceWeapon === 'shotgun') {
+                                    // If bullet is shotgun and enemy is dodging (or could dodge), we need to check if the dodge saved it.
+                                    // Because we already move enemy during dodge, the collision check is accurate. No extra logic needed.
+                                }
+                            }
                             e.health -= b.damage;
                             if (e.health <= 0) enemies.splice(j, 1);
                             hit = true;
@@ -1022,10 +1148,20 @@
                 for (const enemy of enemies) {
                     const s = toScreen(enemy.worldX, enemy.worldY);
                     ctx.beginPath(); ctx.arc(s.x, s.y, enemy.radius, 0, Math.PI*2);
-                    ctx.fillStyle = '#d32f2f'; ctx.fill();
-                    ctx.strokeStyle = '#b71c1c'; ctx.lineWidth = 2; ctx.stroke();
+                    if (enemy.type === 'pistol') {
+                        ctx.fillStyle = '#d32f2f';
+                        ctx.strokeStyle = '#b71c1c';
+                    } else {
+                        ctx.fillStyle = '#ff9800';
+                        ctx.strokeStyle = '#e65100';
+                    }
+                    ctx.fill();
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    // Health bar
                     const eBarW = enemy.radius*2, eBarH = 4;
-                    const eHpPct = enemy.health / 50;
+                    const maxHp = enemy.type === 'pistol' ? 50 : 80;
+                    const eHpPct = enemy.health / maxHp;
                     ctx.fillStyle = '#333';
                     ctx.fillRect(s.x - eBarW/2 -1, s.y - enemy.radius -8 -1, eBarW+2, eBarH+2);
                     ctx.fillStyle = eHpPct > 0.5 ? '#4caf50' : '#ff7043';
@@ -1052,7 +1188,7 @@
                     } else {
                         ctx.beginPath();
                         ctx.arc(s.x, s.y, b.radius, 0, Math.PI*2);
-                        ctx.fillStyle = '#ffdd55';
+                        ctx.fillStyle = b.sourceWeapon === 'shotgun' ? '#ffaa00' : '#ffdd55';
                         ctx.fill();
                     }
                 }
