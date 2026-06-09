@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Infinite Plane | Sniper Beam, Zoom Out & Shake</title>
+    <title>Infinite Plane | Heavy Sniper (Shake, Recoil, Speed)</title>
     <style>
         body {
             margin: 0;
@@ -229,7 +229,8 @@
 
             const pistolState = { ammo: 12, maxAmmo: 12, spare: 20, reloadTime: 1.2, fireRate: 0.45, bulletSpeed: 600, damage: 10 };
             const shotgunState = { ammo: 8, maxAmmo: 8, spare: 20, reloadTime: 1.8, pellets: 8, spreadAngle: Math.PI / 9, bulletSpeed: 500, damage: 8, recoilForce: 400 };
-            const sniperState = { ammo: 5, maxAmmo: 5, spare: 10, reloadTime: 2.0, fireRate: 1.5, bulletSpeed: 1200, damage: 35 };
+            // Sniper now has massive recoil, extreme bullet speed, and stronger shake
+            const sniperState = { ammo: 5, maxAmmo: 5, spare: 10, reloadTime: 2.0, fireRate: 1.5, bulletSpeed: 3000, damage: 35, recoilForce: 600 };
 
             let isReloading = false, reloadTimer = 0;
             let lastFireTime = 0;
@@ -260,7 +261,7 @@
             const enemies = [];
 
             // --- Houses (rectangles, L‑shapes) ---
-            const houses = []; // each house: array of { x, y, w, h }
+            const houses = [];
             function generateHouses() {
                 const numHouses = 20;
                 for (let i = 0; i < numHouses; i++) {
@@ -669,10 +670,16 @@
                 const vy = Math.sin(fireAngle) * state.bulletSpeed;
                 playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx, vy, radius: 4, damage: state.damage, isBeam: true });
                 state.ammo--;
+
+                // Heavy recoil opposite to fire direction
+                recoilVelX = -Math.cos(fireAngle) * state.recoilForce;
+                recoilVelY = -Math.sin(fireAngle) * state.recoilForce;
+
+                // Increased screen shake: stronger and longer
+                screenShake = 14;
+                shakeDuration = 0.28;
+
                 lastFireTime = performance.now();
-                // Screen shake for sniper
-                screenShake = 6;
-                shakeDuration = 0.15;
                 if (state.ammo === 0) startReload();
             }
 
@@ -776,7 +783,7 @@
                     if (reloadTimer <= 0) finishReload();
                 }
 
-                // Recoil decay
+                // Recoil decay (normal)
                 const moveActive = moveVec.x !== 0 || moveVec.y !== 0;
                 const decayRate = moveActive ? 0.8 : 3.0;
                 recoilVelX *= Math.exp(-decayRate * dt);
@@ -893,11 +900,11 @@
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.save();
 
-                // Camera zoom for sniper aim (zoom out to see more)
+                // Camera zoom out for sniper aim
                 if (currentWeapon === 'sniper' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) {
                     const playerScreen = { x: player.worldX + cameraOffsetX, y: player.worldY + cameraOffsetY };
                     ctx.translate(playerScreen.x, playerScreen.y);
-                    ctx.scale(0.65, 0.65);   // zoom out
+                    ctx.scale(0.65, 0.65);
                     ctx.translate(-playerScreen.x, -playerScreen.y);
                 }
 
@@ -923,7 +930,7 @@
                     }
                 }
 
-                // Sniper fan & oscillation line
+                // Sniper fan & oscillation
                 if (currentWeapon === 'sniper' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0) && !isReloading) {
                     const baseAngle = Math.atan2(shootVec.y, shootVec.x);
                     const fanLength = 1500;
@@ -1026,11 +1033,9 @@
                 }
 
                 // Bullets
-                ctx.fillStyle = '#ffdd55';
                 for (const b of playerBullets) {
                     const s = toScreen(b.worldX, b.worldY);
                     if (b.isBeam) {
-                        // Draw beam line from bullet position backwards
                         const angle = Math.atan2(b.vy, b.vx);
                         const beamLength = 40;
                         const startX = s.x - Math.cos(angle) * beamLength;
@@ -1047,6 +1052,7 @@
                     } else {
                         ctx.beginPath();
                         ctx.arc(s.x, s.y, b.radius, 0, Math.PI*2);
+                        ctx.fillStyle = '#ffdd55';
                         ctx.fill();
                     }
                 }
@@ -1076,7 +1082,7 @@
 
                 ctx.restore();
 
-                // UI (unaffected by zoom)
+                // UI
                 const totalSpeed = Math.hypot(worldMoveVelX, worldMoveVelY);
                 let speedText = `Speed: ${Math.round(totalSpeed)} px/s`;
                 if (dashActive) speedText += ' (DASH!)';
