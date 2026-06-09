@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>2D Plane | Pistol, Shotgun, Recoil & Dash</title>
+    <title>2D Plane | Pistol, Shotgun, Skills & Shake</title>
     <style>
         body {
             margin: 0;
@@ -44,6 +44,7 @@
             box-shadow: 0 0 8px rgba(0,0,0,0.5);
         }
 
+        /* Shooting joystick (bottom-right, lower) */
         #shootBase {
             position: fixed;
             bottom: 230px;
@@ -65,6 +66,36 @@
             width: 50px;
             height: 50px;
             background: rgba(255, 200, 100, 0.9);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 11;
+            box-shadow: 0 0 8px rgba(0,0,0,0.5);
+            display: none;
+        }
+
+        /* Skill joystick (above shoot joystick) */
+        #skillBase {
+            position: fixed;
+            bottom: 370px;
+            left: calc(100vw - 140px);
+            width: 120px;
+            height: 120px;
+            background: rgba(100, 150, 255, 0.15);
+            border: 3px solid rgba(100, 150, 255, 0.6);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: auto;
+            z-index: 10;
+            display: none;
+        }
+        #skillThumb {
+            position: fixed;
+            bottom: 370px;
+            left: calc(100vw - 140px);
+            width: 50px;
+            height: 50px;
+            background: rgba(100, 150, 255, 0.9);
             border-radius: 50%;
             transform: translate(-50%, -50%);
             pointer-events: none;
@@ -125,6 +156,8 @@
     <div class="move-joystick-thumb" id="moveThumb"></div>
     <div id="shootBase"></div>
     <div id="shootThumb"></div>
+    <div id="skillBase"></div>
+    <div id="skillThumb"></div>
     <button id="dashButton">DASH</button>
     <button id="pickupButton">PICK UP</button>
 
@@ -138,6 +171,8 @@
             const moveThumbEl = document.getElementById('moveThumb');
             const shootBaseEl = document.getElementById('shootBase');
             const shootThumbEl = document.getElementById('shootThumb');
+            const skillBaseEl = document.getElementById('skillBase');
+            const skillThumbEl = document.getElementById('skillThumb');
 
             // --- Canvas resize ---
             function resizeCanvas() {
@@ -166,56 +201,39 @@
 
             // --- Inventory & Weapons ---
             const inventory = [null, null, null, null];
-            let currentWeapon = null; // 'pistol', 'shotgun', or null
+            let currentWeapon = null;
 
-            // Pistol stats
-            const pistol = {
-                ammo: 12, maxAmmo: 12,
-                spare: 20,
-                reloadTime: 1.2,
-                fireRate: 0.45,
-                bulletSpeed: 600,
-                damage: 10,
-                autoFire: true
-            };
-            // Shotgun stats
-            const shotgun = {
-                ammo: 8, maxAmmo: 8,
-                spare: 20,
-                reloadTime: 1.8,
-                pellets: 8,
-                spreadAngle: Math.PI / 9, // 20°
-                bulletSpeed: 500,
-                damage: 8,
-                recoilForce: 400,
-                fireOnRelease: true
-            };
+            // Weapon states (persistent ammo)
+            const pistolState = { ammo: 12, maxAmmo: 12, spare: 20, reloadTime: 1.2, fireRate: 0.45, bulletSpeed: 600, damage: 10 };
+            const shotgunState = { ammo: 8, maxAmmo: 8, spare: 20, reloadTime: 1.8, pellets: 8, spreadAngle: Math.PI / 9, bulletSpeed: 500, damage: 8, recoilForce: 400 };
 
             let isReloading = false, reloadTimer = 0;
             let lastFireTime = 0;
+
+            // Skill cooldown (only for shotgun)
+            let skillCooldown = 0;
+            const skillCooldownDuration = 1.0;
 
             // --- Recoil ---
             let recoilVelX = 0, recoilVelY = 0;
 
             // --- Floor items ---
-            let pistolOnFloor = {
-                x: 200, y: 200, radius: 15, active: true, type: 'pistol'
-            };
-            let shotgunOnFloor = {
-                x: canvas.width - 200, y: 200, radius: 15, active: true, type: 'shotgun'
-            };
+            let pistolOnFloor = { x: 200, y: 200, radius: 15, active: true, type: 'pistol' };
+            let shotgunOnFloor = { x: canvas.width - 200, y: 200, radius: 15, active: true, type: 'shotgun' };
 
             // --- Dummy ---
             const dummy = {
-                x: canvas.width / 2,
-                y: canvas.height / 2,
-                radius: 30,
-                health: 100,
-                maxHealth: 100
+                x: canvas.width / 2, y: canvas.height / 2, radius: 30,
+                health: 100, maxHealth: 100
             };
 
             // --- Bullets ---
             const bullets = [];
+
+            // --- Effects ---
+            let screenShake = 0;        // intensity (pixels)
+            let shakeDuration = 0;
+            let skillFlashAlpha = 0;    // for visual flash
 
             // --- Joystick states ---
             let movePointerId = null;
@@ -225,7 +243,13 @@
             let shootPointerId = null;
             let shootBaseCenter = { x: 0, y: 0 }, shootMaxDist = 0;
             let shootVec = { x: 0, y: 0 };
-            let shootActive = false; // true while joystick is being held (for shotgun release)
+            let shootActive = false;
+
+            let skillPointerId = null;
+            let skillBaseCenter = { x: 0, y: 0 }, skillMaxDist = 0;
+            let skillVec = { x: 0, y: 0 };
+            let skillActive = false;
+            let skillTarget = { x: 0, y: 0 };   // preview landing spot
 
             // ========== Joystick helpers ==========
             function updateMoveBase() {
@@ -242,9 +266,16 @@
                 shootMaxDist = (rect.width / 2) - (shootThumbEl.offsetWidth / 2);
                 if (shootMaxDist < 0) shootMaxDist = 0;
             }
+            function updateSkillBase() {
+                const rect = skillBaseEl.getBoundingClientRect();
+                skillBaseCenter.x = rect.left + rect.width / 2;
+                skillBaseCenter.y = rect.top + rect.height / 2;
+                skillMaxDist = (rect.width / 2) - (skillThumbEl.offsetWidth / 2);
+                if (skillMaxDist < 0) skillMaxDist = 0;
+            }
             function moveMoveThumb(cx, cy) {
                 let dx = cx - moveBaseCenter.x, dy = cy - moveBaseCenter.y;
-                let dist = Math.sqrt(dx*dx + dy*dy);
+                let dist = Math.hypot(dx, dy);
                 if (dist > moveMaxDist) { dx = (dx/dist)*moveMaxDist; dy = (dy/dist)*moveMaxDist; dist = moveMaxDist; }
                 moveThumbEl.style.left = (moveBaseCenter.x + dx) + 'px';
                 moveThumbEl.style.top = (moveBaseCenter.y + dy) + 'px';
@@ -259,7 +290,7 @@
             }
             function moveShootThumb(cx, cy) {
                 let dx = cx - shootBaseCenter.x, dy = cy - shootBaseCenter.y;
-                let dist = Math.sqrt(dx*dx + dy*dy);
+                let dist = Math.hypot(dx, dy);
                 if (dist > shootMaxDist) { dx = (dx/dist)*shootMaxDist; dy = (dy/dist)*shootMaxDist; dist = shootMaxDist; }
                 shootThumbEl.style.left = (shootBaseCenter.x + dx) + 'px';
                 shootThumbEl.style.top = (shootBaseCenter.y + dy) + 'px';
@@ -273,9 +304,32 @@
                 shootPointerId = null;
                 shootActive = false;
             }
+            function moveSkillThumb(cx, cy) {
+                let dx = cx - skillBaseCenter.x, dy = cy - skillBaseCenter.y;
+                let dist = Math.hypot(dx, dy);
+                if (dist > skillMaxDist) { dx = (dx/dist)*skillMaxDist; dy = (dy/dist)*skillMaxDist; dist = skillMaxDist; }
+                skillThumbEl.style.left = (skillBaseCenter.x + dx) + 'px';
+                skillThumbEl.style.top = (skillBaseCenter.y + dy) + 'px';
+                skillVec.x = dist > 1 ? dx / skillMaxDist : 0;
+                skillVec.y = dist > 1 ? dy / skillMaxDist : 0;
+                // Calculate target point (player will dash to)
+                if (dist > 0) {
+                    const mag = Math.hypot(skillVec.x, skillVec.y);
+                    const dashDist = 120; // dash distance
+                    skillTarget.x = player.x + (skillVec.x / mag) * dashDist;
+                    skillTarget.y = player.y + (skillVec.y / mag) * dashDist;
+                }
+            }
+            function resetSkillThumb() {
+                skillThumbEl.style.left = skillBaseCenter.x + 'px';
+                skillThumbEl.style.top = skillBaseCenter.y + 'px';
+                skillVec.x = 0; skillVec.y = 0;
+                skillPointerId = null;
+                skillActive = false;
+            }
 
-            updateMoveBase(); updateShootBase();
-            window.addEventListener('resize', () => { updateMoveBase(); updateShootBase(); });
+            updateMoveBase(); updateShootBase(); updateSkillBase();
+            window.addEventListener('resize', () => { updateMoveBase(); updateShootBase(); updateSkillBase(); });
 
             // ========== Movement joystick events ==========
             moveBaseEl.addEventListener('pointerdown', (e) => {
@@ -319,7 +373,6 @@
             const shootUp = (e) => {
                 if (shootPointerId === e.pointerId) {
                     e.preventDefault();
-                    // Fire if shotgun and was aiming
                     if (currentWeapon === 'shotgun' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) {
                         fireShotgun();
                     }
@@ -334,10 +387,44 @@
             });
             window.addEventListener('pointerup', (e) => {
                 if (shootPointerId === e.pointerId) {
-                    if (currentWeapon === 'shotgun' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) {
-                        fireShotgun();
-                    }
+                    if (currentWeapon === 'shotgun' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) fireShotgun();
                     resetShootThumb();
+                }
+            });
+
+            // ========== Skill joystick events ==========
+            skillBaseEl.addEventListener('pointerdown', (e) => {
+                if (e.target === skillBaseEl && skillPointerId === null && currentWeapon === 'shotgun' && skillCooldown <= 0) {
+                    e.preventDefault();
+                    skillPointerId = e.pointerId;
+                    skillBaseEl.setPointerCapture(e.pointerId);
+                    updateSkillBase();
+                    moveSkillThumb(e.clientX, e.clientY);
+                    skillActive = true;
+                }
+            });
+            skillBaseEl.addEventListener('pointermove', (e) => {
+                if (skillPointerId === e.pointerId) { e.preventDefault(); moveSkillThumb(e.clientX, e.clientY); }
+            });
+            const skillUp = (e) => {
+                if (skillPointerId === e.pointerId) {
+                    e.preventDefault();
+                    if (skillActive && (skillVec.x !== 0 || skillVec.y !== 0)) {
+                        executeShotgunSkill();
+                    }
+                    resetSkillThumb();
+                    skillBaseEl.releasePointerCapture(e.pointerId);
+                }
+            };
+            skillBaseEl.addEventListener('pointerup', skillUp);
+            skillBaseEl.addEventListener('pointercancel', skillUp);
+            window.addEventListener('pointermove', (e) => {
+                if (skillPointerId === e.pointerId) moveSkillThumb(e.clientX, e.clientY);
+            });
+            window.addEventListener('pointerup', (e) => {
+                if (skillPointerId === e.pointerId) {
+                    if (skillActive && (skillVec.x !== 0 || skillVec.y !== 0)) executeShotgunSkill();
+                    resetSkillThumb();
                 }
             });
 
@@ -350,7 +437,7 @@
             function triggerDash() {
                 if (cooldownTimer > 0 || dashActive) return;
                 if (moveVec.x === 0 && moveVec.y === 0) return;
-                const mag = Math.sqrt(moveVec.x**2 + moveVec.y**2);
+                const mag = Math.hypot(moveVec.x, moveVec.y);
                 dashDirection.x = moveVec.x / mag;
                 dashDirection.y = moveVec.y / mag;
                 dashActive = true; dashTimer = 0;
@@ -364,7 +451,6 @@
             pickupButton.addEventListener('touchstart', (e) => { e.preventDefault(); handlePickup(); });
 
             function handlePickup() {
-                // Check nearest pickup
                 let nearestItem = null, nearestDist = Infinity;
                 if (pistolOnFloor.active) {
                     const d = Math.hypot(player.x - pistolOnFloor.x, player.y - pistolOnFloor.y);
@@ -374,36 +460,54 @@
                     const d = Math.hypot(player.x - shotgunOnFloor.x, player.y - shotgunOnFloor.y);
                     if (d < nearestDist) { nearestDist = d; nearestItem = shotgunOnFloor; }
                 }
-                if (nearestItem && nearestDist < 50) {
-                    pickupWeapon(nearestItem);
-                }
+                if (nearestItem && nearestDist < 50) pickupWeapon(nearestItem);
             }
 
             function pickupWeapon(item) {
-                // Add to inventory if space
-                let slot = inventory.findIndex(s => !s);
-                if (slot === -1) return; // inventory full
+                const slot = inventory.findIndex(s => !s);
+                if (slot === -1) return;
                 inventory[slot] = { name: item.type, icon: item.type === 'pistol' ? '🔫' : '🖖' };
                 item.active = false;
-
-                // Equip the weapon (switch to it)
-                if (currentWeapon !== item.type) {
-                    // reset weapon state
-                    isReloading = false;
-                    currentWeapon = item.type;
-                    if (item.type === 'pistol') {
-                        pistol.ammo = pistol.maxAmmo;
-                        pistol.spare = 20;
-                    } else {
-                        shotgun.ammo = shotgun.maxAmmo;
-                        shotgun.spare = 20;
-                    }
+                // Equip if no weapon equipped, or just add
+                if (!currentWeapon) {
+                    equipWeapon(item.type);
                 }
                 shootBaseEl.style.display = 'block';
                 shootThumbEl.style.display = 'block';
                 updateShootBase();
                 pickupButton.style.display = 'none';
             }
+
+            function equipWeapon(type) {
+                currentWeapon = type;
+                isReloading = false;
+                if (type === 'shotgun') {
+                    skillBaseEl.style.display = 'block';
+                    skillThumbEl.style.display = 'block';
+                    updateSkillBase();
+                } else {
+                    skillBaseEl.style.display = 'none';
+                    skillThumbEl.style.display = 'none';
+                }
+            }
+
+            // Inventory tap to switch weapons
+            canvas.addEventListener('pointerdown', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                // Check if tap is within any inventory slot
+                const startX = 20, startY = 70, slotSize = 50, gap = 5;
+                for (let i = 0; i < 4; i++) {
+                    const slotX = startX + i * (slotSize + gap);
+                    if (mx >= slotX && mx <= slotX + slotSize && my >= startY && my <= startY + slotSize) {
+                        if (inventory[i]) {
+                            const type = inventory[i].name;
+                            if (type !== currentWeapon) equipWeapon(type);
+                        }
+                    }
+                }
+            });
 
             function checkPickupProximity() {
                 let near = false;
@@ -415,68 +519,77 @@
             // ========== Reload ==========
             function startReload() {
                 if (isReloading) return;
-                const wp = currentWeapon === 'pistol' ? pistol : shotgun;
-                if (wp.ammo >= wp.maxAmmo || wp.spare <= 0) return;
+                const state = currentWeapon === 'pistol' ? pistolState : shotgunState;
+                if (state.ammo >= state.maxAmmo || state.spare <= 0) return;
                 isReloading = true;
-                reloadTimer = wp.reloadTime;
+                reloadTimer = state.reloadTime;
             }
             function finishReload() {
-                const wp = currentWeapon === 'pistol' ? pistol : shotgun;
-                const needed = wp.maxAmmo - wp.ammo;
-                const take = Math.min(needed, wp.spare);
-                wp.ammo += take;
-                wp.spare -= take;
+                const state = currentWeapon === 'pistol' ? pistolState : shotgunState;
+                const needed = state.maxAmmo - state.ammo;
+                const take = Math.min(needed, state.spare);
+                state.ammo += take;
+                state.spare -= take;
                 isReloading = false;
             }
 
             // ========== Firing ==========
             function firePistol(now) {
-                if (isReloading || pistol.ammo <= 0) {
-                    if (pistol.ammo === 0) startReload();
-                    return false;
-                }
-                if (now - lastFireTime < pistol.fireRate * 1000) return false;
+                const state = pistolState;
+                if (isReloading || state.ammo <= 0) { if (state.ammo === 0) startReload(); return false; }
+                if (now - lastFireTime < state.fireRate * 1000) return false;
                 if (shootVec.x === 0 && shootVec.y === 0) return false;
-
                 const mag = Math.hypot(shootVec.x, shootVec.y);
-                const vx = (shootVec.x / mag) * pistol.bulletSpeed;
-                const vy = (shootVec.y / mag) * pistol.bulletSpeed;
-                bullets.push({
-                    x: player.x, y: player.y, vx, vy,
-                    radius: 5, damage: pistol.damage
-                });
-                pistol.ammo--;
+                const vx = (shootVec.x / mag) * state.bulletSpeed;
+                const vy = (shootVec.y / mag) * state.bulletSpeed;
+                bullets.push({ x: player.x, y: player.y, vx, vy, radius: 5, damage: state.damage });
+                state.ammo--;
                 lastFireTime = now;
-                if (pistol.ammo === 0) startReload();
+                if (state.ammo === 0) startReload();
                 return true;
             }
 
             function fireShotgun() {
-                if (isReloading || shotgun.ammo <= 0) {
-                    if (shotgun.ammo === 0) startReload();
-                    return;
-                }
+                const state = shotgunState;
+                if (isReloading || state.ammo <= 0) { if (state.ammo === 0) startReload(); return; }
                 const mag = Math.hypot(shootVec.x, shootVec.y);
-                const dirX = shootVec.x / mag;
-                const dirY = shootVec.y / mag;
-                const pellets = shotgun.pellets;
-                const spread = shotgun.spreadAngle;
-                for (let i = 0; i < pellets; i++) {
-                    const angle = Math.atan2(dirY, dirX) + (Math.random() * 2 - 1) * spread;
-                    const speed = shotgun.bulletSpeed + (Math.random() * 100 - 50);
-                    bullets.push({
-                        x: player.x, y: player.y,
-                        vx: Math.cos(angle) * speed,
-                        vy: Math.sin(angle) * speed,
-                        radius: 3, damage: shotgun.damage
-                    });
+                const dirX = shootVec.x / mag, dirY = shootVec.y / mag;
+                for (let i = 0; i < state.pellets; i++) {
+                    const angle = Math.atan2(dirY, dirX) + (Math.random()*2-1)*state.spreadAngle;
+                    const speed = state.bulletSpeed + (Math.random()*100-50);
+                    bullets.push({ x: player.x, y: player.y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 3, damage: state.damage });
                 }
-                shotgun.ammo--;
-                // Recoil: fling player opposite to aim direction
-                const recoilMag = shotgun.recoilForce;
-                recoilVelX = -dirX * recoilMag;
-                recoilVelY = -dirY * recoilMag;
-                if (shotgun.ammo === 0) startReload();
+                state.ammo--;
+                recoilVelX = -dirX * state.recoilForce;
+                recoilVelY = -dirY * state.recoilForce;
+                if (state.ammo === 0) startReload();
+            }
+
+            // ========== Shotgun Skill ==========
+            function executeShotgunSkill() {
+                if (skillCooldown > 0) return;
+                const state = shotgunState;
+                // Dash player to target point
+                player.x = skillTarget.x;
+                player.y = skillTarget.y;
+                // Keep inside bounds
+                const margin = player.radius;
+                player.x = Math.max(margin, Math.min(canvas.width - margin, player.x));
+                player.y = Math.max(margin, Math.min(canvas.height - margin, player.y));
+
+                // Fire bullets in all directions (360)
+                const bulletCount = 16;
+                for (let i = 0; i < bulletCount; i++) {
+                    const angle = (i / bulletCount) * Math.PI * 2;
+                    const speed = state.bulletSpeed;
+                    bullets.push({ x: player.x, y: player.y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 4, damage: state.damage * 0.7 });
+                }
+                // Intense effects
+                screenShake = 10;
+                shakeDuration = 0.3;
+                skillFlashAlpha = 0.6;
+                // Cooldown
+                skillCooldown = skillCooldownDuration;
             }
 
             // ========== Game loop ==========
@@ -497,6 +610,16 @@
                     if (cooldownTimer <= 0) { cooldownTimer = 0; updateDashUI(); }
                 }
 
+                // Skill cooldown
+                if (skillCooldown > 0) skillCooldown -= dt;
+
+                // Screen shake
+                if (shakeDuration > 0) {
+                    shakeDuration -= dt;
+                    if (shakeDuration <= 0) screenShake = 0;
+                }
+                if (skillFlashAlpha > 0) skillFlashAlpha -= dt * 2.5; // decay
+
                 // Reload timer
                 if (isReloading) {
                     reloadTimer -= dt;
@@ -505,11 +628,10 @@
 
                 // Recoil decay
                 const moveActive = moveVec.x !== 0 || moveVec.y !== 0;
-                const decayRate = moveActive ? 0.8 : 3.0; // slower if moving
+                const decayRate = moveActive ? 0.8 : 3.0;
                 const decayFactor = Math.exp(-decayRate * dt);
                 recoilVelX *= decayFactor;
                 recoilVelY *= decayFactor;
-                // Stop tiny values
                 if (Math.abs(recoilVelX) < 0.1) recoilVelX = 0;
                 if (Math.abs(recoilVelY) < 0.1) recoilVelY = 0;
 
@@ -531,7 +653,6 @@
                 if (currentWeapon === 'pistol' && (shootVec.x !== 0 || shootVec.y !== 0)) {
                     firePistol(now);
                 }
-                // Shotgun fires on release, handled in event
 
                 // Bullet updates & collisions
                 for (let i = bullets.length - 1; i >= 0; i--) {
@@ -550,8 +671,14 @@
 
                 checkPickupProximity();
 
-                // --- Draw ---
+                // --- Draw with screen shake ---
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.save();
+                if (screenShake > 0) {
+                    const shakeX = (Math.random() * 2 - 1) * screenShake;
+                    const shakeY = (Math.random() * 2 - 1) * screenShake;
+                    ctx.translate(shakeX, shakeY);
+                }
 
                 // Grid
                 ctx.strokeStyle = 'rgba(255,255,255,0.08)';
@@ -559,21 +686,34 @@
                 for (let x = 0; x < canvas.width; x += 50) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
                 for (let y = 0; y < canvas.height; y += 50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
 
-                // Shotgun aim fan (if currently aiming with shotgun)
+                // Shotgun aim fan
                 if (currentWeapon === 'shotgun' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0) && !isReloading) {
                     const aimAngle = Math.atan2(shootVec.y, shootVec.x);
-                    const halfSpread = shotgun.spreadAngle;
-                    const fanRadius = 80;
-                    ctx.save();
-                    ctx.globalAlpha = 0.25;
-                    ctx.fillStyle = '#ffaa00';
+                    const halfSpread = shotgunState.spreadAngle;
+                    ctx.save(); ctx.globalAlpha = 0.25; ctx.fillStyle = '#ffaa00';
+                    ctx.beginPath(); ctx.moveTo(player.x, player.y);
+                    ctx.arc(player.x, player.y, 80, aimAngle - halfSpread, aimAngle + halfSpread);
+                    ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1; ctx.restore();
+                }
+
+                // Skill aim preview
+                if (skillActive && (skillVec.x !== 0 || skillVec.y !== 0)) {
+                    ctx.beginPath();
+                    ctx.arc(skillTarget.x, skillTarget.y, 10, 0, Math.PI*2);
+                    ctx.fillStyle = '#00bfff';
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    // Line to target
                     ctx.beginPath();
                     ctx.moveTo(player.x, player.y);
-                    ctx.arc(player.x, player.y, fanRadius, aimAngle - halfSpread, aimAngle + halfSpread);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.globalAlpha = 1;
-                    ctx.restore();
+                    ctx.lineTo(skillTarget.x, skillTarget.y);
+                    ctx.strokeStyle = '#00bfff';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
                 }
 
                 // Dummy
@@ -611,9 +751,17 @@
                 ctx.fillStyle = dashActive ? '#e63946' : '#F4A261'; ctx.fill();
                 ctx.strokeStyle = dashActive ? '#fff' : '#E76F51'; ctx.lineWidth = 3; ctx.stroke();
 
-                // Speed display
-                const speed = Math.hypot(moveSpeedX, moveSpeedY);
-                let speedText = `Speed: ${Math.round(speed)} px/s`;
+                // Flash effect overlay (skill)
+                if (skillFlashAlpha > 0) {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${skillFlashAlpha})`;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                }
+
+                ctx.restore(); // end screen shake
+
+                // UI elements (outside shake)
+                const totalSpeed = Math.hypot(moveSpeedX, moveSpeedY);
+                let speedText = `Speed: ${Math.round(totalSpeed)} px/s`;
                 if (dashActive) speedText += ' (DASH!)';
                 if (Math.abs(recoilVelX) > 0.5 || Math.abs(recoilVelY) > 0.5) speedText += ' (recoil)';
                 ctx.font = 'bold 16px monospace'; ctx.fillStyle = 'white';
@@ -621,10 +769,9 @@
                 ctx.fillText(speedText, 20, 40);
                 ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
 
-                // Weapon & ammo info
                 if (currentWeapon) {
-                    const wp = currentWeapon === 'pistol' ? pistol : shotgun;
-                    let ammoText = `${currentWeapon}: ${wp.ammo}/${wp.maxAmmo} | spares: ${wp.spare}`;
+                    const state = currentWeapon === 'pistol' ? pistolState : shotgunState;
+                    let ammoText = `${currentWeapon}: ${state.ammo}/${state.maxAmmo} | spares: ${state.spare}`;
                     if (isReloading) ammoText += ' RELOADING...';
                     ctx.font = 'bold 16px monospace'; ctx.fillStyle = '#ffc107';
                     ctx.shadowColor = 'black'; ctx.shadowBlur = 4;
@@ -634,11 +781,16 @@
                     ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
                 }
 
-                // Inventory
-                const startX = 20, startY = 70, slotSize = 50;
+                // Inventory (clickable, drawn on canvas)
+                const startX = 20, startY = 70, slotSize = 50, gap = 5;
                 ctx.strokeStyle = 'white'; ctx.lineWidth = 2;
                 for (let i = 0; i < 4; i++) {
-                    const x = startX + i * (slotSize + 5);
+                    const x = startX + i * (slotSize + gap);
+                    // Highlight if this slot's weapon is currently equipped
+                    if (inventory[i] && inventory[i].name === currentWeapon) {
+                        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                        ctx.fillRect(x, startY, slotSize, slotSize);
+                    }
                     ctx.strokeRect(x, startY, slotSize, slotSize);
                     if (inventory[i]) {
                         ctx.font = '24px sans-serif'; ctx.fillStyle = 'white'; ctx.textAlign = 'center';
@@ -647,12 +799,12 @@
                     }
                 }
                 ctx.font = '12px sans-serif'; ctx.fillStyle = 'white';
-                ctx.fillText('INVENTORY', startX, startY - 5);
+                ctx.fillText('INVENTORY (tap to switch)', startX, startY - 5);
 
                 requestAnimationFrame(gameLoop);
             }
 
-            // Initialise dummy and floor positions based on canvas
+            // Initial positions
             dummy.x = canvas.width / 2;
             dummy.y = canvas.height / 2;
             pistolOnFloor.x = canvas.width / 2 - 200;
