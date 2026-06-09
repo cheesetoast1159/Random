@@ -3,24 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Top‑Down Circle with Joystick</title>
+    <title>Top‑Down Circle with Dash & Joystick</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
             background: #2b2b2b;
-            touch-action: none; /* prevent browser gestures */
+            touch-action: none;
             font-family: sans-serif;
         }
         canvas {
             display: block;
             background: #3a5a40;
         }
-        /* Joystick base (visible circle) */
+
+        /* --- Joystick --- */
         .joystick-base {
             position: fixed;
             bottom: 40px;
-            left: 40px;
+            left: 100px;                      /* moved right from 40px */
             width: 120px;
             height: 120px;
             background: rgba(255, 255, 255, 0.15);
@@ -30,19 +31,46 @@
             pointer-events: auto;
             z-index: 10;
         }
-        /* Joystick thumb (movable handle) */
         .joystick-thumb {
             position: fixed;
             bottom: 40px;
-            left: 40px;
+            left: 100px;                      /* same shift as base */
             width: 50px;
             height: 50px;
             background: rgba(255, 255, 255, 0.9);
             border-radius: 50%;
             transform: translate(-50%, -50%);
-            pointer-events: none; /* events go to base */
+            pointer-events: none;
             z-index: 11;
             box-shadow: 0 0 8px rgba(0,0,0,0.5);
+        }
+
+        /* --- Dash Button --- */
+        #dashButton {
+            position: fixed;
+            bottom: 40px;
+            right: 40px;
+            padding: 18px 28px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: white;
+            background: #e63946;
+            border: none;
+            border-radius: 50px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            cursor: pointer;
+            z-index: 20;
+            transition: background 0.2s, transform 0.1s;
+            user-select: none;
+            touch-action: manipulation;
+        }
+        #dashButton:active {
+            transform: scale(0.95);
+        }
+        #dashButton.disabled {
+            background: #555;
+            pointer-events: none;
+            cursor: not-allowed;
         }
     </style>
 </head>
@@ -50,6 +78,7 @@
     <canvas id="gameCanvas"></canvas>
     <div class="joystick-base" id="joystickBase"></div>
     <div class="joystick-thumb" id="joystickThumb"></div>
+    <button id="dashButton">DASH</button>
 
     <script>
         (function() {
@@ -64,13 +93,58 @@
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
 
-            // --- Game character ---
+            // --- Player ---
             const player = {
                 x: canvas.width / 2,
                 y: canvas.height / 2,
                 radius: 20,
-                speed: 200  // pixels per second
+                speed: 200                 // base speed (pixels/sec)
             };
+
+            // --- Dash mechanics ---
+            const dashDuration = 0.3;       // seconds the dash lasts
+            const dashMultiplier = 3.5;     // speed multiplier during dash
+            const dashCooldown = 1.0;       // seconds before next dash allowed
+            let dashTimer = 0;              // remaining dash time (>0 = dashing)
+            let cooldownTimer = 0;          // remaining cooldown (>0 = can't dash)
+            let currentSpeed = player.speed;
+
+            const dashButton = document.getElementById('dashButton');
+
+            function updateDashButtonVisual() {
+                if (cooldownTimer > 0) {
+                    dashButton.textContent = 'COOLING...';
+                    dashButton.classList.add('disabled');
+                } else if (dashTimer > 0) {
+                    dashButton.textContent = 'DASHING!';
+                    dashButton.classList.add('disabled');
+                } else {
+                    dashButton.textContent = 'DASH';
+                    dashButton.classList.remove('disabled');
+                }
+            }
+
+            function triggerDash() {
+                if (cooldownTimer > 0 || dashTimer > 0) return;
+                // Only dash if joystick is giving input (optional, but logical)
+                // If you want dash to work even without joystick, remove this check
+                if (joystickVec.x === 0 && joystickVec.y === 0) return; // comment out to allow dash without movement
+
+                dashTimer = dashDuration;
+                currentSpeed = player.speed * dashMultiplier;
+                updateDashButtonVisual();
+            }
+
+            // Dash button listener
+            dashButton.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                triggerDash();
+            });
+            // Prevent default touch events on button
+            dashButton.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                triggerDash();
+            });
 
             // --- Joystick setup ---
             const baseEl = document.getElementById('joystickBase');
@@ -78,22 +152,19 @@
 
             let activePointerId = null;
             let baseCenter = { x: 0, y: 0 };
-            let maxDist = 0;    // max distance from base center to edge (thumb can't exceed this)
-            let joystickVec = { x: 0, y: 0 };  // normalised direction * magnitude (0..1)
+            let maxDist = 0;
+            let joystickVec = { x: 0, y: 0 };   // normalised direction (-1..1)
 
             function updateBaseDimensions() {
                 const rect = baseEl.getBoundingClientRect();
                 baseCenter.x = rect.left + rect.width / 2;
                 baseCenter.y = rect.top + rect.height / 2;
-                // The thumb can move within the base radius minus its own half-size
                 maxDist = (rect.width / 2) - (thumbEl.offsetWidth / 2);
-                // Ensure minimum 0
                 if (maxDist < 0) maxDist = 0;
             }
             window.addEventListener('resize', updateBaseDimensions);
             updateBaseDimensions();
 
-            // Move thumb to a screen position (clamped to base circle)
             function moveThumb(clientX, clientY) {
                 let dx = clientX - baseCenter.x;
                 let dy = clientY - baseCenter.y;
@@ -105,16 +176,11 @@
                     dist = maxDist;
                 }
 
-                // Update thumb position (relative to viewport)
                 thumbEl.style.left = (baseCenter.x + dx) + 'px';
                 thumbEl.style.top = (baseCenter.y + dy) + 'px';
-                // No transform needed – already centered via CSS transform? 
-                // We set left/top to the thumb's center point. CSS already translates -50% -50%.
-                // So we just set left/top = center position.
 
-                // Update joystick vector (normalised direction * strength)
                 if (dist > 1) {
-                    joystickVec.x = dx / maxDist;   // -1 to 1
+                    joystickVec.x = dx / maxDist;
                     joystickVec.y = dy / maxDist;
                 } else {
                     joystickVec.x = 0;
@@ -130,13 +196,13 @@
                 activePointerId = null;
             }
 
-            // --- Pointer events (mouse + touch) ---
+            // Pointer events
             function onPointerDown(e) {
                 if (e.target === baseEl && activePointerId === null) {
                     e.preventDefault();
                     activePointerId = e.pointerId;
                     baseEl.setPointerCapture(e.pointerId);
-                    updateBaseDimensions(); // just in case
+                    updateBaseDimensions();
                     moveThumb(e.clientX, e.clientY);
                 }
             }
@@ -156,21 +222,16 @@
                 }
             }
 
-            // Attach listeners to the base element
             baseEl.addEventListener('pointerdown', onPointerDown);
             baseEl.addEventListener('pointermove', onPointerMove);
             baseEl.addEventListener('pointerup', onPointerUp);
             baseEl.addEventListener('pointercancel', onPointerUp);
-            // Also listen on window for move/up to catch events if pointer leaves base
+
             window.addEventListener('pointermove', (e) => {
-                if (activePointerId === e.pointerId) {
-                    moveThumb(e.clientX, e.clientY);
-                }
+                if (activePointerId === e.pointerId) moveThumb(e.clientX, e.clientY);
             });
             window.addEventListener('pointerup', (e) => {
-                if (activePointerId === e.pointerId) {
-                    resetThumb();
-                }
+                if (activePointerId === e.pointerId) resetThumb();
             });
 
             // --- Game loop ---
@@ -178,34 +239,51 @@
 
             function gameLoop(now) {
                 let dt = (now - lastTime) / 1000;
-                if (dt > 0.1) dt = 0.1;  // cap to avoid jumps
+                if (dt > 0.1) dt = 0.1;
                 lastTime = now;
 
-                // Update player position based on joystick vector
-                if (joystickVec.x !== 0 || joystickVec.y !== 0) {
-                    player.x += joystickVec.x * player.speed * dt;
-                    player.y += joystickVec.y * player.speed * dt;
-
-                    // Keep player inside canvas (with margin equal to radius)
-                    const margin = player.radius;
-                    if (player.x < margin) player.x = margin;
-                    if (player.x > canvas.width - margin) player.x = canvas.width - margin;
-                    if (player.y < margin) player.y = margin;
-                    if (player.y > canvas.height - margin) player.y = canvas.height - margin;
+                // Update dash timers
+                if (dashTimer > 0) {
+                    dashTimer -= dt;
+                    if (dashTimer <= 0) {
+                        dashTimer = 0;
+                        currentSpeed = player.speed;
+                        cooldownTimer = dashCooldown;
+                    }
+                    updateDashButtonVisual();
+                }
+                if (cooldownTimer > 0) {
+                    cooldownTimer -= dt;
+                    if (cooldownTimer <= 0) {
+                        cooldownTimer = 0;
+                        updateDashButtonVisual();
+                    }
                 }
 
-                // Draw everything
+                // Movement
+                if (joystickVec.x !== 0 || joystickVec.y !== 0) {
+                    const moveX = joystickVec.x * currentSpeed * dt;
+                    const moveY = joystickVec.y * currentSpeed * dt;
+                    player.x += moveX;
+                    player.y += moveY;
+
+                    // Keep player inside canvas
+                    const margin = player.radius;
+                    player.x = Math.max(margin, Math.min(canvas.width - margin, player.x));
+                    player.y = Math.max(margin, Math.min(canvas.height - margin, player.y));
+                }
+
                 drawBackground();
                 drawPlayer();
+                drawVelocity();
 
                 requestAnimationFrame(gameLoop);
             }
 
             function drawBackground() {
-                // Clear canvas
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                // Draw a grid to give a feeling of a top-down plane
+                // Grid
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
                 ctx.lineWidth = 1;
                 const gridSize = 50;
@@ -224,17 +302,16 @@
             }
 
             function drawPlayer() {
-                // Simple circle (top-down view)
                 ctx.beginPath();
                 ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-                ctx.fillStyle = '#F4A261';
+                // Change colour during dash
+                ctx.fillStyle = dashTimer > 0 ? '#e63946' : '#F4A261';
                 ctx.fill();
-                ctx.strokeStyle = '#E76F51';
+                ctx.strokeStyle = dashTimer > 0 ? '#ffffff' : '#E76F51';
                 ctx.lineWidth = 3;
                 ctx.stroke();
 
-                // Small "eyes" to indicate facing direction? Not needed for top-down.
-                // Optionally add a subtle shadow
+                // Subtle shadow
                 ctx.shadowColor = 'rgba(0,0,0,0.3)';
                 ctx.shadowBlur = 8;
                 ctx.fill();
@@ -242,7 +319,22 @@
                 ctx.shadowBlur = 0;
             }
 
-            // Start the loop
+            function drawVelocity() {
+                const speedText = Math.round(currentSpeed);
+                const dashStatus = dashTimer > 0 ? ' (DASH!)' : '';
+                const display = `Speed: ${speedText} px/s${dashStatus}`;
+
+                ctx.font = 'bold 18px monospace';
+                ctx.fillStyle = 'white';
+                ctx.shadowColor = 'black';
+                ctx.shadowBlur = 4;
+                ctx.fillText(display, 20, 40);
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+            }
+
+            // Initial button state
+            updateDashButtonVisual();
             requestAnimationFrame(gameLoop);
         })();
     </script>
