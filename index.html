@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Infinite Plane | Houses, Plain Floor, Soft Camera</title>
+    <title>Infinite Plane | Houses, Sniper & Zoom</title>
     <style>
         body {
             margin: 0;
@@ -200,12 +200,11 @@
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
 
-            // --- Infinite world: camera offsets ---
-            let cameraOffsetX = 0;
-            let cameraOffsetY = 0;
-            const CAMERA_FOLLOW_SPEED = 1.5;   // reduced pull strength
+            // --- Infinite world camera ---
+            let cameraOffsetX = 0, cameraOffsetY = 0;
+            const CAMERA_FOLLOW_SPEED = 1.5; // soft pull
 
-            // --- Player (world coordinates) ---
+            // --- Player ---
             const player = {
                 worldX: canvas.width / 2,
                 worldY: canvas.height / 2,
@@ -230,6 +229,7 @@
 
             const pistolState = { ammo: 12, maxAmmo: 12, spare: 20, reloadTime: 1.2, fireRate: 0.45, bulletSpeed: 600, damage: 10 };
             const shotgunState = { ammo: 8, maxAmmo: 8, spare: 20, reloadTime: 1.8, pellets: 8, spreadAngle: Math.PI / 9, bulletSpeed: 500, damage: 8, recoilForce: 400 };
+            const sniperState = { ammo: 5, maxAmmo: 5, spare: 10, reloadTime: 2.0, fireRate: 1.5, bulletSpeed: 1200, damage: 35 };
 
             let isReloading = false, reloadTimer = 0;
             let lastFireTime = 0;
@@ -240,11 +240,12 @@
             // --- Recoil ---
             let recoilVelX = 0, recoilVelY = 0;
 
-            // --- Floor items (world coordinates) ---
+            // --- Floor items ---
             let pistolOnFloor = { worldX: canvas.width/2 - 200, worldY: canvas.height/2 + 80, radius: 15, active: true, type: 'pistol' };
             let shotgunOnFloor = { worldX: canvas.width/2 + 200, worldY: canvas.height/2 + 80, radius: 15, active: true, type: 'shotgun' };
+            let sniperOnFloor = { worldX: canvas.width/2, worldY: canvas.height/2 - 150, radius: 15, active: true, type: 'sniper' };
 
-            // --- Dummy (world coordinates) ---
+            // --- Dummy ---
             const dummy = {
                 worldX: canvas.width / 2 + 50,
                 worldY: canvas.height / 2,
@@ -258,29 +259,57 @@
             const enemyBullets = [];
             const enemies = [];
 
-            // --- Random houses (static obstacles) ---
-            const houses = [];
+            // --- Houses (rectangles, L‑shapes) ---
+            const houses = []; // each house: array of { x, y, w, h }
             function generateHouses() {
-                const numHouses = 30;
+                const numHouses = 20;
                 for (let i = 0; i < numHouses; i++) {
                     let x, y, valid;
                     do {
                         x = (Math.random() - 0.5) * 2000;
                         y = (Math.random() - 0.5) * 2000;
                         valid = true;
-                        // avoid spawning too close to player start
-                        if (Math.hypot(x - player.worldX, y - player.worldY) < 150) valid = false;
-                        // avoid dummy
-                        if (Math.hypot(x - dummy.worldX, y - dummy.worldY) < 100) valid = false;
-                        // avoid pickups
-                        if (pistolOnFloor.active && Math.hypot(x - pistolOnFloor.worldX, y - pistolOnFloor.worldY) < 100) valid = false;
-                        if (shotgunOnFloor.active && Math.hypot(x - shotgunOnFloor.worldX, y - shotgunOnFloor.worldY) < 100) valid = false;
-                        // avoid too close to other houses (optional)
+                        if (Math.hypot(x - player.worldX, y - player.worldY) < 200) valid = false;
+                        if (dummy && Math.hypot(x - dummy.worldX, y - dummy.worldY) < 100) valid = false;
                     } while (!valid);
-                    houses.push({ worldX: x, worldY: y, radius: 40 });
+
+                    // decide shape: single block or L‑shape (two rectangles)
+                    const shape = Math.random() < 0.5 ? 'single' : 'L';
+                    const rects = [];
+                    const baseW = 60 + Math.random() * 40;
+                    const baseH = 60 + Math.random() * 40;
+                    if (shape === 'single') {
+                        rects.push({ x: x - baseW/2, y: y - baseH/2, w: baseW, h: baseH });
+                    } else {
+                        // L‑shape: two rectangles sharing a corner
+                        const secondW = 40 + Math.random() * 30;
+                        const secondH = 40 + Math.random() * 30;
+                        // placement relative to base
+                        rects.push({ x: x - baseW/2, y: y - baseH/2, w: baseW, h: baseH });
+                        // second rectangle attached to one side (random orientation)
+                        const side = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
+                        if (side === 0) { // top
+                            rects.push({ x: x - secondW/2, y: y - baseH/2 - secondH, w: secondW, h: secondH });
+                        } else if (side === 1) { // right
+                            rects.push({ x: x + baseW/2, y: y - secondH/2, w: secondW, h: secondH });
+                        } else if (side === 2) { // bottom
+                            rects.push({ x: x - secondW/2, y: y + baseH/2, w: secondW, h: secondH });
+                        } else { // left
+                            rects.push({ x: x - baseW/2 - secondW, y: y - secondH/2, w: secondW, h: secondH });
+                        }
+                    }
+                    houses.push(rects);
                 }
             }
             generateHouses();
+
+            // --- Sniper accuracy state ---
+            let sniperSpread = 0.3; // current spread in radians (starts wide)
+            const SNIPER_MAX_SPREAD = 0.3;
+            const SNIPER_MIN_SPREAD = 0.0;
+            const SNIPER_SPREAD_RECOVERY = 0.3; // rad per second reduction
+            let sniperAimAngle = 0; // current oscillating angle offset
+            const SNIPER_OSCILLATION_SPEED = 2.5; // speed of oscillation
 
             // --- Effects ---
             let screenShake = 0, shakeDuration = 0;
@@ -302,7 +331,7 @@
             let skillActive = false;
             let skillTargetWorld = { x: 0, y: 0 };
 
-            // ========== Joystick helpers ==========
+            // ========== Joystick helpers (same as before) ==========
             function updateMoveBase() {
                 const rect = moveBaseEl.getBoundingClientRect();
                 moveBaseCenter.x = rect.left + rect.width / 2;
@@ -423,8 +452,12 @@
             const shootUp = (e) => {
                 if (shootPointerId === e.pointerId) {
                     e.preventDefault();
-                    if (currentWeapon === 'shotgun' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) {
-                        fireShotgun();
+                    if (shootActive && shootVec.x !== 0 && shootVec.y !== 0) {
+                        if (currentWeapon === 'shotgun') {
+                            fireShotgun();
+                        } else if (currentWeapon === 'sniper') {
+                            fireSniper();
+                        }
                     }
                     resetShootThumb();
                     shootBaseEl.releasePointerCapture(e.pointerId);
@@ -437,7 +470,10 @@
             });
             window.addEventListener('pointerup', (e) => {
                 if (shootPointerId === e.pointerId) {
-                    if (currentWeapon === 'shotgun' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) fireShotgun();
+                    if (shootActive && shootVec.x !== 0 && shootVec.y !== 0) {
+                        if (currentWeapon === 'shotgun') fireShotgun();
+                        else if (currentWeapon === 'sniper') fireSniper();
+                    }
                     resetShootThumb();
                 }
             });
@@ -501,13 +537,10 @@
 
             function handlePickup() {
                 let nearestItem = null, nearestDist = Infinity;
-                if (pistolOnFloor.active) {
-                    const d = Math.hypot(player.worldX - pistolOnFloor.worldX, player.worldY - pistolOnFloor.worldY);
-                    if (d < nearestDist) { nearestDist = d; nearestItem = pistolOnFloor; }
-                }
-                if (shotgunOnFloor.active) {
-                    const d = Math.hypot(player.worldX - shotgunOnFloor.worldX, player.worldY - shotgunOnFloor.worldY);
-                    if (d < nearestDist) { nearestDist = d; nearestItem = shotgunOnFloor; }
+                const items = [pistolOnFloor, shotgunOnFloor, sniperOnFloor].filter(i => i.active);
+                for (const item of items) {
+                    const d = Math.hypot(player.worldX - item.worldX, player.worldY - item.worldY);
+                    if (d < nearestDist) { nearestDist = d; nearestItem = item; }
                 }
                 if (nearestItem && nearestDist < 50) pickupWeapon(nearestItem);
             }
@@ -515,7 +548,8 @@
             function pickupWeapon(item) {
                 const slot = inventory.findIndex(s => !s);
                 if (slot === -1) return;
-                inventory[slot] = { name: item.type, icon: item.type === 'pistol' ? '🔫' : '🖖' };
+                const icon = item.type === 'pistol' ? '🔫' : (item.type === 'shotgun' ? '🖖' : '🔭');
+                inventory[slot] = { name: item.type, icon };
                 item.active = false;
                 if (!currentWeapon) equipWeapon(item.type);
                 shootBaseEl.style.display = 'block';
@@ -535,6 +569,7 @@
                     skillBaseEl.style.display = 'none';
                     skillThumbEl.style.display = 'none';
                 }
+                if (type === 'sniper') sniperSpread = SNIPER_MAX_SPREAD; // reset spread
             }
 
             canvas.addEventListener('pointerdown', (e) => {
@@ -554,21 +589,22 @@
 
             function checkPickupProximity() {
                 let near = false;
-                if (pistolOnFloor.active && Math.hypot(player.worldX - pistolOnFloor.worldX, player.worldY - pistolOnFloor.worldY) < 50) near = true;
-                if (shotgunOnFloor.active && Math.hypot(player.worldX - shotgunOnFloor.worldX, player.worldY - shotgunOnFloor.worldY) < 50) near = true;
+                [pistolOnFloor, shotgunOnFloor, sniperOnFloor].forEach(item => {
+                    if (item.active && Math.hypot(player.worldX - item.worldX, player.worldY - item.worldY) < 50) near = true;
+                });
                 pickupButton.style.display = near ? 'block' : 'none';
             }
 
             // ========== Reload ==========
             function startReload() {
                 if (isReloading) return;
-                const state = currentWeapon === 'pistol' ? pistolState : shotgunState;
+                const state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
                 if (state.ammo >= state.maxAmmo || state.spare <= 0) return;
                 isReloading = true;
                 reloadTimer = state.reloadTime;
             }
             function finishReload() {
-                const state = currentWeapon === 'pistol' ? pistolState : shotgunState;
+                const state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
                 const needed = state.maxAmmo - state.ammo;
                 const take = Math.min(needed, state.spare);
                 state.ammo += take;
@@ -576,23 +612,26 @@
                 isReloading = false;
             }
 
-            // ========== Collision resolution with houses ==========
+            // --- Collision with houses ---
             function resolveHouseCollisions(entity) {
                 for (const house of houses) {
-                    const dx = entity.worldX - house.worldX;
-                    const dy = entity.worldY - house.worldY;
-                    const dist = Math.hypot(dx, dy);
-                    const minDist = entity.radius + house.radius;
-                    if (dist < minDist) {
-                        const angle = Math.atan2(dy, dx);
-                        const overlap = minDist - dist;
-                        entity.worldX += Math.cos(angle) * overlap;
-                        entity.worldY += Math.sin(angle) * overlap;
+                    for (const rect of house) {
+                        const closestX = Math.max(rect.x, Math.min(entity.worldX, rect.x + rect.w));
+                        const closestY = Math.max(rect.y, Math.min(entity.worldY, rect.y + rect.h));
+                        const dx = entity.worldX - closestX;
+                        const dy = entity.worldY - closestY;
+                        const dist = Math.hypot(dx, dy);
+                        if (dist < entity.radius) {
+                            const angle = Math.atan2(dy, dx);
+                            const overlap = entity.radius - dist;
+                            entity.worldX += Math.cos(angle) * overlap;
+                            entity.worldY += Math.sin(angle) * overlap;
+                        }
                     }
                 }
             }
 
-            // ========== Firing (world space) ==========
+            // ========== Firing functions ==========
             function firePistol(now) {
                 const state = pistolState;
                 if (isReloading || state.ammo <= 0) { if (state.ammo === 0) startReload(); return false; }
@@ -624,11 +663,26 @@
                 if (state.ammo === 0) startReload();
             }
 
+            function fireSniper() {
+                const state = sniperState;
+                if (isReloading || state.ammo <= 0) { if (state.ammo === 0) startReload(); return; }
+                const mag = Math.hypot(shootVec.x, shootVec.y);
+                const baseAngle = Math.atan2(shootVec.y, shootVec.x);
+                // actual bullet angle = baseAngle + sniperAimAngle (oscillation)
+                const fireAngle = baseAngle + sniperAimAngle;
+                const vx = Math.cos(fireAngle) * state.bulletSpeed;
+                const vy = Math.sin(fireAngle) * state.bulletSpeed;
+                playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx, vy, radius: 4, damage: state.damage });
+                state.ammo--;
+                lastFireTime = performance.now();
+                if (state.ammo === 0) startReload();
+            }
+
             function executeShotgunSkill() {
                 if (skillCooldown > 0) return;
                 player.worldX = skillTargetWorld.x;
                 player.worldY = skillTargetWorld.y;
-                resolveHouseCollisions(player); // prevent teleporting into a house
+                resolveHouseCollisions(player);
                 const bulletCount = 32;
                 for (let i = 0; i < bulletCount; i++) {
                     const angle = (i / bulletCount) * Math.PI * 2;
@@ -650,7 +704,9 @@
                     valid = true;
                     if (Math.hypot(worldX - player.worldX, worldY - player.worldY) < 200) valid = false;
                     for (const house of houses) {
-                        if (Math.hypot(worldX - house.worldX, worldY - house.worldY) < 100) valid = false;
+                        for (const rect of house) {
+                            if (worldX > rect.x - 20 && worldX < rect.x + rect.w + 20 && worldY > rect.y - 20 && worldY < rect.y + rect.h + 20) valid = false;
+                        }
                     }
                 } while (!valid);
                 enemies.push({
@@ -663,7 +719,6 @@
                     damage: pistolState.damage
                 });
             }
-
             spawnButton.addEventListener('pointerdown', (e) => { e.preventDefault(); spawnEnemy(); });
             spawnButton.addEventListener('touchstart', (e) => { e.preventDefault(); spawnEnemy(); });
 
@@ -678,7 +733,7 @@
                         enemy.worldX += Math.cos(angle) * enemy.speed * dt;
                         enemy.worldY += Math.sin(angle) * enemy.speed * dt;
                     }
-                    resolveHouseCollisions(enemy); // enemies also respect houses
+                    resolveHouseCollisions(enemy);
                     if (now - enemy.lastFire > enemy.fireRate * 1000) {
                         const a = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
                         enemyBullets.push({
@@ -731,7 +786,19 @@
                 if (Math.abs(recoilVelX) < 0.1) recoilVelX = 0;
                 if (Math.abs(recoilVelY) < 0.1) recoilVelY = 0;
 
-                // World movement velocity
+                // Sniper spread update
+                const playerMoving = moveVec.x !== 0 || moveVec.y !== 0 || Math.abs(recoilVelX) > 5 || Math.abs(recoilVelY) > 5;
+                if (currentWeapon === 'sniper') {
+                    if (!playerMoving) {
+                        sniperSpread = Math.max(SNIPER_MIN_SPREAD, sniperSpread - SNIPER_SPREAD_RECOVERY * dt);
+                    } else {
+                        sniperSpread = SNIPER_MAX_SPREAD;
+                    }
+                    // Update oscillation: time-based
+                    sniperAimAngle = Math.sin(now * 0.001 * SNIPER_OSCILLATION_SPEED) * (sniperSpread / 2);
+                }
+
+                // World movement
                 let worldMoveVelX = moveVec.x * player.baseSpeed + recoilVelX;
                 let worldMoveVelY = moveVec.y * player.baseSpeed + recoilVelY;
                 if (dashActive) {
@@ -739,30 +806,22 @@
                     worldMoveVelX += dashDirection.x * dashMag;
                     worldMoveVelY += dashDirection.y * dashMag;
                 }
-
-                // Update player world position
                 player.worldX += worldMoveVelX * dt;
                 player.worldY += worldMoveVelY * dt;
-
-                // Collide with houses
                 resolveHouseCollisions(player);
 
-                // Camera centering (soft pull)
-                const centerX = canvas.width / 2;
-                const centerY = canvas.height / 2;
+                // Camera centering
+                const centerX = canvas.width / 2, centerY = canvas.height / 2;
                 const screenX = player.worldX + cameraOffsetX;
                 const screenY = player.worldY + cameraOffsetY;
-                const dx = screenX - centerX;
-                const dy = screenY - centerY;
-                cameraOffsetX -= dx * CAMERA_FOLLOW_SPEED * dt;
-                cameraOffsetY -= dy * CAMERA_FOLLOW_SPEED * dt;
+                cameraOffsetX -= (screenX - centerX) * CAMERA_FOLLOW_SPEED * dt;
+                cameraOffsetY -= (screenY - centerY) * CAMERA_FOLLOW_SPEED * dt;
 
-                // Shooting
-                if (currentWeapon === 'pistol' && (shootVec.x !== 0 || shootVec.y !== 0)) {
+                // Shooting (pistol auto)
+                if (currentWeapon === 'pistol' && shootActive) {
                     firePistol(now);
                 }
 
-                // Enemies
                 updateEnemies(now, dt);
 
                 // Player bullets collisions
@@ -770,16 +829,18 @@
                     const b = playerBullets[i];
                     b.worldX += b.vx * dt;
                     b.worldY += b.vy * dt;
-                    // Check house collisions? Bullets can pass through or collide? We'll make them collide with houses and disappear.
                     let remove = false;
                     for (const house of houses) {
-                        if (Math.hypot(b.worldX - house.worldX, b.worldY - house.worldY) < b.radius + house.radius) {
-                            remove = true;
-                            break;
+                        for (const rect of house) {
+                            if (b.worldX > rect.x - b.radius && b.worldX < rect.x + rect.w + b.radius &&
+                                b.worldY > rect.y - b.radius && b.worldY < rect.y + rect.h + b.radius) {
+                                remove = true;
+                                break;
+                            }
                         }
+                        if (remove) break;
                     }
                     if (remove) { playerBullets.splice(i, 1); continue; }
-
                     let hit = false;
                     for (let j = enemies.length - 1; j >= 0; j--) {
                         const e = enemies[j];
@@ -802,13 +863,16 @@
                     const b = enemyBullets[i];
                     b.worldX += b.vx * dt;
                     b.worldY += b.vy * dt;
-                    // Collide with houses
                     let remove = false;
                     for (const house of houses) {
-                        if (Math.hypot(b.worldX - house.worldX, b.worldY - house.worldY) < b.radius + house.radius) {
-                            remove = true;
-                            break;
+                        for (const rect of house) {
+                            if (b.worldX > rect.x - b.radius && b.worldX < rect.x + rect.w + b.radius &&
+                                b.worldY > rect.y - b.radius && b.worldY < rect.y + rect.h + b.radius) {
+                                remove = true;
+                                break;
+                            }
                         }
+                        if (remove) break;
                     }
                     if (remove) { enemyBullets.splice(i, 1); continue; }
                     if (Math.hypot(b.worldX - player.worldX, b.worldY - player.worldY) < player.radius + b.radius) {
@@ -828,11 +892,20 @@
 
                 checkPickupProximity();
 
-                // --- Draw (plain floor, no grid) ---
+                // --- Draw ---
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                // Background already solid #3a5a40 via canvas style
-
                 ctx.save();
+
+                // Camera zoom for sniper aim
+                let zoomFactor = 1.0;
+                if (currentWeapon === 'sniper' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) {
+                    zoomFactor = 1.4; // zoom out (smaller numbers = zoom in, larger = out)
+                    const playerScreen = { x: player.worldX + cameraOffsetX, y: player.worldY + cameraOffsetY };
+                    ctx.translate(playerScreen.x, playerScreen.y);
+                    ctx.scale(zoomFactor, zoomFactor);
+                    ctx.translate(-playerScreen.x, -playerScreen.y);
+                }
+
                 if (screenShake > 0) {
                     const shakeX = (Math.random()*2-1)*screenShake;
                     const shakeY = (Math.random()*2-1)*screenShake;
@@ -843,17 +916,51 @@
                 function toScreen(wx, wy) { return { x: wx + cameraOffsetX, y: wy + cameraOffsetY }; }
 
                 for (const house of houses) {
-                    const s = toScreen(house.worldX, house.worldY);
-                    ctx.beginPath();
-                    ctx.arc(s.x, s.y, house.radius, 0, Math.PI*2);
-                    ctx.fillStyle = '#8B5A2B'; // brown
-                    ctx.fill();
-                    ctx.strokeStyle = '#5C4033';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
+                    for (const rect of house) {
+                        const s = toScreen(rect.x, rect.y);
+                        ctx.fillStyle = '#8B5A2B';
+                        ctx.fillRect(s.x, s.y, rect.w, rect.h);
+                        ctx.strokeStyle = '#5C4033';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(s.x, s.y, rect.w, rect.h);
+                    }
                 }
 
-                // Shotgun aim fan
+                // Sniper fan & oscillation line
+                if (currentWeapon === 'sniper' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0) && !isReloading) {
+                    const baseAngle = Math.atan2(shootVec.y, shootVec.x);
+                    const fanLength = 1500;
+                    const pScreen = toScreen(player.worldX, player.worldY);
+                    // Draw spread fan
+                    ctx.save();
+                    ctx.globalAlpha = 0.2;
+                    ctx.fillStyle = '#00ffff';
+                    ctx.beginPath();
+                    ctx.moveTo(pScreen.x, pScreen.y);
+                    ctx.arc(pScreen.x, pScreen.y, fanLength, baseAngle - sniperSpread/2, baseAngle + sniperSpread/2);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.globalAlpha = 1;
+                    // draw outline of fan
+                    ctx.strokeStyle = '#00ffff';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    // Draw oscillation line
+                    const aimAngle = baseAngle + sniperAimAngle;
+                    const endX = pScreen.x + Math.cos(aimAngle) * fanLength;
+                    const endY = pScreen.y + Math.sin(aimAngle) * fanLength;
+                    ctx.beginPath();
+                    ctx.moveTo(pScreen.x, pScreen.y);
+                    ctx.lineTo(endX, endY);
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([4, 4]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.restore();
+                }
+
+                // Shotgun aim fan (if not sniper)
                 if (currentWeapon === 'shotgun' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0) && !isReloading) {
                     const aimAngle = Math.atan2(shootVec.y, shootVec.x);
                     const halfSpread = shotgunState.spreadAngle;
@@ -898,14 +1005,14 @@
                 ctx.textAlign = 'start';
 
                 // Floor items
-                [pistolOnFloor, shotgunOnFloor].forEach(item => {
+                [pistolOnFloor, shotgunOnFloor, sniperOnFloor].forEach(item => {
                     if (item.active) {
                         const s = toScreen(item.worldX, item.worldY);
                         ctx.beginPath(); ctx.arc(s.x, s.y, item.radius, 0, Math.PI*2);
                         ctx.fillStyle = '#ffc107'; ctx.fill();
                         ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
                         ctx.fillStyle = '#000'; ctx.font = '18px monospace'; ctx.textAlign = 'center';
-                        ctx.fillText(item.type === 'pistol' ? '🔫' : '🖖', s.x, s.y+6);
+                        ctx.fillText(item.type === 'pistol' ? '🔫' : (item.type === 'shotgun' ? '🖖' : '🔭'), s.x, s.y+6);
                         ctx.textAlign = 'start';
                     }
                 });
@@ -947,9 +1054,9 @@
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                 }
 
-                ctx.restore();
+                ctx.restore(); // end zoom/shake
 
-                // UI
+                // UI (outside zoom)
                 const totalSpeed = Math.hypot(worldMoveVelX, worldMoveVelY);
                 let speedText = `Speed: ${Math.round(totalSpeed)} px/s`;
                 if (dashActive) speedText += ' (DASH!)';
@@ -960,7 +1067,7 @@
                 ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
 
                 if (currentWeapon) {
-                    const state = currentWeapon === 'pistol' ? pistolState : shotgunState;
+                    const state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
                     let ammoText = `${currentWeapon}: ${state.ammo}/${state.maxAmmo} | spares: ${state.spare}`;
                     if (isReloading) ammoText += ' RELOADING...';
                     ctx.font = 'bold 16px monospace'; ctx.fillStyle = '#ffc107';
