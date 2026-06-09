@@ -17,11 +17,11 @@
             background: #3a5a40;
         }
 
-        /* --- Joystick --- */
+        /* --- Joystick (now clearly visible on the left) --- */
         .joystick-base {
             position: fixed;
             bottom: 40px;
-            left: 100px;                      /* moved right from 40px */
+            left: 100px;
             width: 120px;
             height: 120px;
             background: rgba(255, 255, 255, 0.15);
@@ -34,7 +34,7 @@
         .joystick-thumb {
             position: fixed;
             bottom: 40px;
-            left: 100px;                      /* same shift as base */
+            left: 100px;
             width: 50px;
             height: 50px;
             background: rgba(255, 255, 255, 0.9);
@@ -45,21 +45,21 @@
             box-shadow: 0 0 8px rgba(0,0,0,0.5);
         }
 
-        /* --- Dash Button --- */
+        /* --- Dash Button – now top‑right, impossible to miss --- */
         #dashButton {
             position: fixed;
-            bottom: 40px;
-            right: 40px;
-            padding: 18px 28px;
-            font-size: 1.2rem;
+            top: 30px;                 /* clearly in view */
+            right: 30px;
+            padding: 22px 36px;
+            font-size: 1.3rem;
             font-weight: bold;
             color: white;
             background: #e63946;
-            border: none;
+            border: 4px solid white;   /* white border for contrast */
             border-radius: 50px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            box-shadow: 0 0 20px rgba(0,0,0,0.6);
             cursor: pointer;
-            z-index: 20;
+            z-index: 100;              /* very high, above everything */
             transition: background 0.2s, transform 0.1s;
             user-select: none;
             touch-action: manipulation;
@@ -69,6 +69,7 @@
         }
         #dashButton.disabled {
             background: #555;
+            border-color: #aaa;
             pointer-events: none;
             cursor: not-allowed;
         }
@@ -85,6 +86,10 @@
             const canvas = document.getElementById('gameCanvas');
             const ctx = canvas.getContext('2d');
 
+            // Confirm the button exists (check console)
+            const dashButton = document.getElementById('dashButton');
+            console.log('Dash button found:', dashButton);
+
             // --- Canvas resize ---
             function resizeCanvas() {
                 canvas.width = window.innerWidth;
@@ -98,18 +103,16 @@
                 x: canvas.width / 2,
                 y: canvas.height / 2,
                 radius: 20,
-                speed: 200                 // base speed (pixels/sec)
+                speed: 200
             };
 
             // --- Dash mechanics ---
-            const dashDuration = 0.3;       // seconds the dash lasts
-            const dashMultiplier = 3.5;     // speed multiplier during dash
-            const dashCooldown = 1.0;       // seconds before next dash allowed
-            let dashTimer = 0;              // remaining dash time (>0 = dashing)
-            let cooldownTimer = 0;          // remaining cooldown (>0 = can't dash)
+            const dashDuration = 0.3;
+            const dashMultiplier = 3.5;
+            const dashCooldown = 1.0;
+            let dashTimer = 0;
+            let cooldownTimer = 0;
             let currentSpeed = player.speed;
-
-            const dashButton = document.getElementById('dashButton');
 
             function updateDashButtonVisual() {
                 if (cooldownTimer > 0) {
@@ -126,21 +129,19 @@
 
             function triggerDash() {
                 if (cooldownTimer > 0 || dashTimer > 0) return;
-                // Only dash if joystick is giving input (optional, but logical)
-                // If you want dash to work even without joystick, remove this check
-                if (joystickVec.x === 0 && joystickVec.y === 0) return; // comment out to allow dash without movement
+                // Only dash if joystick is giving input (optional, you can remove this check)
+                if (joystickVec.x === 0 && joystickVec.y === 0) return;
 
                 dashTimer = dashDuration;
                 currentSpeed = player.speed * dashMultiplier;
                 updateDashButtonVisual();
             }
 
-            // Dash button listener
+            // Dash button listeners
             dashButton.addEventListener('pointerdown', (e) => {
                 e.preventDefault();
                 triggerDash();
             });
-            // Prevent default touch events on button
             dashButton.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 triggerDash();
@@ -153,7 +154,7 @@
             let activePointerId = null;
             let baseCenter = { x: 0, y: 0 };
             let maxDist = 0;
-            let joystickVec = { x: 0, y: 0 };   // normalised direction (-1..1)
+            let joystickVec = { x: 0, y: 0 };
 
             function updateBaseDimensions() {
                 const rect = baseEl.getBoundingClientRect();
@@ -196,7 +197,6 @@
                 activePointerId = null;
             }
 
-            // Pointer events
             function onPointerDown(e) {
                 if (e.target === baseEl && activePointerId === null) {
                     e.preventDefault();
@@ -267,7 +267,6 @@
                     player.x += moveX;
                     player.y += moveY;
 
-                    // Keep player inside canvas
                     const margin = player.radius;
                     player.x = Math.max(margin, Math.min(canvas.width - margin, player.x));
                     player.y = Math.max(margin, Math.min(canvas.height - margin, player.y));
@@ -283,7 +282,6 @@
             function drawBackground() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                // Grid
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
                 ctx.lineWidth = 1;
                 const gridSize = 50;
@@ -304,14 +302,12 @@
             function drawPlayer() {
                 ctx.beginPath();
                 ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-                // Change colour during dash
                 ctx.fillStyle = dashTimer > 0 ? '#e63946' : '#F4A261';
                 ctx.fill();
                 ctx.strokeStyle = dashTimer > 0 ? '#ffffff' : '#E76F51';
                 ctx.lineWidth = 3;
                 ctx.stroke();
 
-                // Subtle shadow
                 ctx.shadowColor = 'rgba(0,0,0,0.3)';
                 ctx.shadowBlur = 8;
                 ctx.fill();
@@ -333,7 +329,6 @@
                 ctx.shadowBlur = 0;
             }
 
-            // Initial button state
             updateDashButtonVisual();
             requestAnimationFrame(gameLoop);
         })();
