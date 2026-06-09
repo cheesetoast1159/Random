@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Infinite Plane | Pistol, Shotgun, Skills & Enemies</title>
+    <title>Infinite Plane | Player‑Centering Camera</title>
     <style>
         body {
             margin: 0;
@@ -200,10 +200,10 @@
             window.addEventListener('resize', resizeCanvas);
             resizeCanvas();
 
-            // --- Infinite world parameters ---
-            const PLAY_AREA_RADIUS = 300; // invisible circle radius from screen center
+            // --- Infinite world: camera offsets ---
             let cameraOffsetX = 0;
             let cameraOffsetY = 0;
+            const CAMERA_FOLLOW_SPEED = 4.0;   // strength of centering pull
 
             // --- Player (world coordinates) ---
             const player = {
@@ -215,10 +215,10 @@
                 maxHealth: 100
             };
 
-            // --- Dash (decay back to normal) ---
+            // --- Dash (normal decay) ---
             const dashDuration = 0.2;
             const maxDashSpeed = 800;
-            const dashDecayRate = 18;     // normal decay
+            const dashDecayRate = 18;
             const dashCooldown = 1.0;
             let dashActive = false, dashTimer = 0;
             let dashDirection = { x: 0, y: 0 };
@@ -276,7 +276,7 @@
             let skillBaseCenter = { x: 0, y: 0 }, skillMaxDist = 0;
             let skillVec = { x: 0, y: 0 };
             let skillActive = false;
-            let skillTargetWorld = { x: 0, y: 0 }; // target in world coordinates
+            let skillTargetWorld = { x: 0, y: 0 };
 
             // ========== Joystick helpers ==========
             function updateMoveBase() {
@@ -339,7 +339,6 @@
                 skillThumbEl.style.top = (skillBaseCenter.y + dy) + 'px';
                 skillVec.x = dist > 1 ? dx / skillMaxDist : 0;
                 skillVec.y = dist > 1 ? dy / skillMaxDist : 0;
-                // Convert skill direction to world target (relative to player's world position)
                 if (dist > 0) {
                     const dashDist = 120;
                     const mag = Math.hypot(skillVec.x, skillVec.y);
@@ -589,7 +588,6 @@
                 if (skillCooldown > 0) return;
                 player.worldX = skillTargetWorld.x;
                 player.worldY = skillTargetWorld.y;
-                // Keep inside world? Not needed for infinite world, but keep within some reasonable bounds? We'll just allow.
                 const bulletCount = 32;
                 for (let i = 0; i < bulletCount; i++) {
                     const angle = (i / bulletCount) * Math.PI * 2;
@@ -604,7 +602,6 @@
 
             // ========== Enemy logic ==========
             function spawnEnemy() {
-                // Spawn at a random world position away from player
                 let worldX, worldY;
                 do {
                     worldX = player.worldX + (Math.random() - 0.5) * 800;
@@ -615,7 +612,7 @@
                     radius: 18,
                     health: 50,
                     speed: 120,
-                    fireRate: 0.6,
+                    fireRate: 2.6,
                     lastFire: performance.now(),
                     damage: pistolState.damage
                 });
@@ -679,15 +676,15 @@
                     if (reloadTimer <= 0) finishReload();
                 }
 
-                // Recoil decay (normal, but now recoil affects world movement)
+                // Recoil decay (normal)
                 const moveActive = moveVec.x !== 0 || moveVec.y !== 0;
-                const decayRate = moveActive ? 0.8 : 3.0; // normal rates
+                const decayRate = moveActive ? 0.8 : 3.0;
                 recoilVelX *= Math.exp(-decayRate * dt);
                 recoilVelY *= Math.exp(-decayRate * dt);
                 if (Math.abs(recoilVelX) < 0.1) recoilVelX = 0;
                 if (Math.abs(recoilVelY) < 0.1) recoilVelY = 0;
 
-                // Calculate world movement velocity
+                // World movement velocity
                 let worldMoveVelX = moveVec.x * player.baseSpeed + recoilVelX;
                 let worldMoveVelY = moveVec.y * player.baseSpeed + recoilVelY;
                 if (dashActive) {
@@ -696,36 +693,20 @@
                     worldMoveVelY += dashDirection.y * dashMag;
                 }
 
-                // Apply movement to world position, then adjust camera if needed
-                const moveX = worldMoveVelX * dt;
-                const moveY = worldMoveVelY * dt;
+                // Update player world position
+                player.worldX += worldMoveVelX * dt;
+                player.worldY += worldMoveVelY * dt;
 
-                // Desired new world position
-                let newWorldX = player.worldX + moveX;
-                let newWorldY = player.worldY + moveY;
-
-                // Screen position of player (current camera)
-                let screenX = newWorldX + cameraOffsetX;
-                let screenY = newWorldY + cameraOffsetY;
+                // Camera centering: map scrolls to bring player toward screen center
                 const centerX = canvas.width / 2;
                 const centerY = canvas.height / 2;
-                const distFromCenter = Math.hypot(screenX - centerX, screenY - centerY);
-
-                if (distFromCenter <= PLAY_AREA_RADIUS) {
-                    // Player moves freely, camera stays
-                    player.worldX = newWorldX;
-                    player.worldY = newWorldY;
-                } else {
-                    // Player tries to leave the circle → scroll the world
-                    const angle = Math.atan2(screenY - centerY, screenX - centerX);
-                    const clampedScreenX = centerX + Math.cos(angle) * PLAY_AREA_RADIUS;
-                    const clampedScreenY = centerY + Math.sin(angle) * PLAY_AREA_RADIUS;
-                    // Update camera offset to keep player at boundary
-                    cameraOffsetX = clampedScreenX - newWorldX;
-                    cameraOffsetY = clampedScreenY - newWorldY;
-                    player.worldX = newWorldX;
-                    player.worldY = newWorldY;
-                }
+                const screenX = player.worldX + cameraOffsetX;
+                const screenY = player.worldY + cameraOffsetY;
+                const dx = screenX - centerX;
+                const dy = screenY - centerY;
+                // Adjust camera offset proportional to distance from center
+                cameraOffsetX -= dx * CAMERA_FOLLOW_SPEED * dt;
+                cameraOffsetY -= dy * CAMERA_FOLLOW_SPEED * dt;
 
                 // Shooting
                 if (currentWeapon === 'pistol' && (shootVec.x !== 0 || shootVec.y !== 0)) {
@@ -740,7 +721,6 @@
                     const b = playerBullets[i];
                     b.worldX += b.vx * dt;
                     b.worldY += b.vy * dt;
-                    // Check enemy collisions
                     let hit = false;
                     for (let j = enemies.length - 1; j >= 0; j--) {
                         const e = enemies[j];
@@ -752,7 +732,6 @@
                         }
                     }
                     if (hit) { playerBullets.splice(i, 1); continue; }
-                    // Dummy hit
                     if (Math.hypot(b.worldX - dummy.worldX, b.worldY - dummy.worldY) < dummy.radius + b.radius) {
                         dummy.health = Math.max(1, dummy.health - b.damage);
                         playerBullets.splice(i, 1);
@@ -781,7 +760,7 @@
 
                 checkPickupProximity();
 
-                // --- Draw everything with camera offset ---
+                // --- Draw with camera offset ---
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.save();
                 if (screenShake > 0) {
@@ -794,9 +773,8 @@
                 const gridSize = 50;
                 ctx.strokeStyle = 'rgba(255,255,255,0.08)';
                 ctx.lineWidth = 1;
-                // Calculate starting positions based on camera offset
-                const startGridX = (-cameraOffsetX % gridSize + gridSize) % gridSize;
-                const startGridY = (-cameraOffsetY % gridSize + gridSize) % gridSize;
+                const startGridX = ((-cameraOffsetX % gridSize) + gridSize) % gridSize;
+                const startGridY = ((-cameraOffsetY % gridSize) + gridSize) % gridSize;
                 for (let x = startGridX; x < canvas.width + gridSize; x += gridSize) {
                     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
                 }
@@ -804,12 +782,11 @@
                     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
                 }
 
-                // Helper: world to screen
                 function toScreen(wx, wy) {
                     return { x: wx + cameraOffsetX, y: wy + cameraOffsetY };
                 }
 
-                // Shotgun aim fan (in world space, but drawn around player screen)
+                // Shotgun aim fan
                 if (currentWeapon === 'shotgun' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0) && !isReloading) {
                     const aimAngle = Math.atan2(shootVec.y, shootVec.x);
                     const halfSpread = shotgunState.spreadAngle;
