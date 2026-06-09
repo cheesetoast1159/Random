@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>2D Plane | Pistol, Shotgun, Skills & Shake</title>
+    <title>2D Plane | Enemies, Slower Decay, Skill Boost</title>
     <style>
         body {
             margin: 0;
@@ -44,7 +44,6 @@
             box-shadow: 0 0 8px rgba(0,0,0,0.5);
         }
 
-        /* Shooting joystick (bottom-right, lower) */
         #shootBase {
             position: fixed;
             bottom: 230px;
@@ -74,7 +73,6 @@
             display: none;
         }
 
-        /* Skill joystick (above shoot joystick) */
         #skillBase {
             position: fixed;
             bottom: 370px;
@@ -148,6 +146,24 @@
             touch-action: manipulation;
             box-shadow: 0 0 15px rgba(0,0,0,0.5);
         }
+
+        #spawnButton {
+            position: fixed;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 14px 28px;
+            font-size: 1rem;
+            font-weight: bold;
+            color: white;
+            background: #9c27b0;
+            border: 3px solid white;
+            border-radius: 30px;
+            cursor: pointer;
+            z-index: 100;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+            touch-action: manipulation;
+        }
     </style>
 </head>
 <body>
@@ -160,6 +176,7 @@
     <div id="skillThumb"></div>
     <button id="dashButton">DASH</button>
     <button id="pickupButton">PICK UP</button>
+    <button id="spawnButton">SPAWN ENEMY</button>
 
     <script>
         (function() {
@@ -167,6 +184,7 @@
             const ctx = canvas.getContext('2d');
             const dashButton = document.getElementById('dashButton');
             const pickupButton = document.getElementById('pickupButton');
+            const spawnButton = document.getElementById('spawnButton');
             const moveBaseEl = document.getElementById('moveBase');
             const moveThumbEl = document.getElementById('moveThumb');
             const shootBaseEl = document.getElementById('shootBase');
@@ -187,13 +205,15 @@
                 x: canvas.width / 2 - 100,
                 y: canvas.height / 2,
                 radius: 18,
-                baseSpeed: 200
+                baseSpeed: 200,
+                health: 100,
+                maxHealth: 100
             };
 
-            // --- Dash ---
+            // --- Dash (decay greatly reduced) ---
             const dashDuration = 0.2;
             const maxDashSpeed = 800;
-            const dashDecayRate = 18;
+            const dashDecayRate = 8;          // reduced from 18
             const dashCooldown = 1.0;
             let dashActive = false, dashTimer = 0;
             let dashDirection = { x: 0, y: 0 };
@@ -203,18 +223,16 @@
             const inventory = [null, null, null, null];
             let currentWeapon = null;
 
-            // Weapon states (persistent ammo)
             const pistolState = { ammo: 12, maxAmmo: 12, spare: 20, reloadTime: 1.2, fireRate: 0.45, bulletSpeed: 600, damage: 10 };
             const shotgunState = { ammo: 8, maxAmmo: 8, spare: 20, reloadTime: 1.8, pellets: 8, spreadAngle: Math.PI / 9, bulletSpeed: 500, damage: 8, recoilForce: 400 };
 
             let isReloading = false, reloadTimer = 0;
             let lastFireTime = 0;
 
-            // Skill cooldown (only for shotgun)
             let skillCooldown = 0;
             const skillCooldownDuration = 1.0;
 
-            // --- Recoil ---
+            // --- Recoil (decay greatly reduced) ---
             let recoilVelX = 0, recoilVelY = 0;
 
             // --- Floor items ---
@@ -227,15 +245,16 @@
                 health: 100, maxHealth: 100
             };
 
-            // --- Bullets ---
-            const bullets = [];
+            // --- Bullets & enemies ---
+            const playerBullets = [];
+            const enemyBullets = [];
+            const enemies = [];
 
             // --- Effects ---
-            let screenShake = 0;        // intensity (pixels)
-            let shakeDuration = 0;
-            let skillFlashAlpha = 0;    // for visual flash
+            let screenShake = 0, shakeDuration = 0;
+            let skillFlashAlpha = 0;
 
-            // --- Joystick states ---
+            // ========== Joystick states ==========
             let movePointerId = null;
             let moveBaseCenter = { x: 0, y: 0 }, moveMaxDist = 0;
             let moveVec = { x: 0, y: 0 };
@@ -249,7 +268,7 @@
             let skillBaseCenter = { x: 0, y: 0 }, skillMaxDist = 0;
             let skillVec = { x: 0, y: 0 };
             let skillActive = false;
-            let skillTarget = { x: 0, y: 0 };   // preview landing spot
+            let skillTarget = { x: 0, y: 0 };
 
             // ========== Joystick helpers ==========
             function updateMoveBase() {
@@ -312,10 +331,9 @@
                 skillThumbEl.style.top = (skillBaseCenter.y + dy) + 'px';
                 skillVec.x = dist > 1 ? dx / skillMaxDist : 0;
                 skillVec.y = dist > 1 ? dy / skillMaxDist : 0;
-                // Calculate target point (player will dash to)
                 if (dist > 0) {
+                    const dashDist = 120;
                     const mag = Math.hypot(skillVec.x, skillVec.y);
-                    const dashDist = 120; // dash distance
                     skillTarget.x = player.x + (skillVec.x / mag) * dashDist;
                     skillTarget.y = player.y + (skillVec.y / mag) * dashDist;
                 }
@@ -468,10 +486,7 @@
                 if (slot === -1) return;
                 inventory[slot] = { name: item.type, icon: item.type === 'pistol' ? '🔫' : '🖖' };
                 item.active = false;
-                // Equip if no weapon equipped, or just add
-                if (!currentWeapon) {
-                    equipWeapon(item.type);
-                }
+                if (!currentWeapon) equipWeapon(item.type);
                 shootBaseEl.style.display = 'block';
                 shootThumbEl.style.display = 'block';
                 updateShootBase();
@@ -491,19 +506,16 @@
                 }
             }
 
-            // Inventory tap to switch weapons
             canvas.addEventListener('pointerdown', (e) => {
                 const rect = canvas.getBoundingClientRect();
                 const mx = e.clientX - rect.left;
                 const my = e.clientY - rect.top;
-                // Check if tap is within any inventory slot
                 const startX = 20, startY = 70, slotSize = 50, gap = 5;
                 for (let i = 0; i < 4; i++) {
                     const slotX = startX + i * (slotSize + gap);
                     if (mx >= slotX && mx <= slotX + slotSize && my >= startY && my <= startY + slotSize) {
-                        if (inventory[i]) {
-                            const type = inventory[i].name;
-                            if (type !== currentWeapon) equipWeapon(type);
+                        if (inventory[i] && inventory[i].name !== currentWeapon) {
+                            equipWeapon(inventory[i].name);
                         }
                     }
                 }
@@ -542,7 +554,7 @@
                 const mag = Math.hypot(shootVec.x, shootVec.y);
                 const vx = (shootVec.x / mag) * state.bulletSpeed;
                 const vy = (shootVec.y / mag) * state.bulletSpeed;
-                bullets.push({ x: player.x, y: player.y, vx, vy, radius: 5, damage: state.damage });
+                playerBullets.push({ x: player.x, y: player.y, vx, vy, radius: 5, damage: state.damage });
                 state.ammo--;
                 lastFireTime = now;
                 if (state.ammo === 0) startReload();
@@ -557,7 +569,7 @@
                 for (let i = 0; i < state.pellets; i++) {
                     const angle = Math.atan2(dirY, dirX) + (Math.random()*2-1)*state.spreadAngle;
                     const speed = state.bulletSpeed + (Math.random()*100-50);
-                    bullets.push({ x: player.x, y: player.y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 3, damage: state.damage });
+                    playerBullets.push({ x: player.x, y: player.y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 3, damage: state.damage });
                 }
                 state.ammo--;
                 recoilVelX = -dirX * state.recoilForce;
@@ -568,28 +580,73 @@
             // ========== Shotgun Skill ==========
             function executeShotgunSkill() {
                 if (skillCooldown > 0) return;
-                const state = shotgunState;
-                // Dash player to target point
                 player.x = skillTarget.x;
                 player.y = skillTarget.y;
-                // Keep inside bounds
                 const margin = player.radius;
                 player.x = Math.max(margin, Math.min(canvas.width - margin, player.x));
                 player.y = Math.max(margin, Math.min(canvas.height - margin, player.y));
 
-                // Fire bullets in all directions (360)
-                const bulletCount = 16;
+                const bulletCount = 32;  // doubled
                 for (let i = 0; i < bulletCount; i++) {
                     const angle = (i / bulletCount) * Math.PI * 2;
-                    const speed = state.bulletSpeed;
-                    bullets.push({ x: player.x, y: player.y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 4, damage: state.damage * 0.7 });
+                    const speed = shotgunState.bulletSpeed;
+                    playerBullets.push({ x: player.x, y: player.y, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 4, damage: shotgunState.damage * 0.7 });
                 }
-                // Intense effects
                 screenShake = 10;
                 shakeDuration = 0.3;
                 skillFlashAlpha = 0.6;
-                // Cooldown
                 skillCooldown = skillCooldownDuration;
+            }
+
+            // ========== Enemy logic ==========
+            function spawnEnemy() {
+                let spawnX, spawnY;
+                do {
+                    spawnX = Math.random() * (canvas.width - 60) + 30;
+                    spawnY = Math.random() * (canvas.height - 60) + 30;
+                } while (Math.hypot(spawnX - player.x, spawnY - player.y) < 300);
+                enemies.push({
+                    x: spawnX,
+                    y: spawnY,
+                    radius: 18,
+                    health: 50,
+                    speed: 120,
+                    fireRate: 0.6,
+                    lastFire: performance.now(),
+                    damage: pistolState.damage
+                });
+            }
+
+            spawnButton.addEventListener('pointerdown', (e) => { e.preventDefault(); spawnEnemy(); });
+            spawnButton.addEventListener('touchstart', (e) => { e.preventDefault(); spawnEnemy(); });
+
+            function updateEnemies(now, dt) {
+                for (const enemy of enemies) {
+                    const dx = player.x - enemy.x;
+                    const dy = player.y - enemy.y;
+                    const dist = Math.hypot(dx, dy);
+                    const minDist = 150;
+                    // move towards player if farther than minDist
+                    if (dist > minDist + 5) {
+                        const angle = Math.atan2(dy, dx);
+                        enemy.x += Math.cos(angle) * enemy.speed * dt;
+                        enemy.y += Math.sin(angle) * enemy.speed * dt;
+                    }
+                    // keep inside canvas
+                    enemy.x = Math.max(enemy.radius, Math.min(canvas.width - enemy.radius, enemy.x));
+                    enemy.y = Math.max(enemy.radius, Math.min(canvas.height - enemy.radius, enemy.y));
+                    // shoot at player if within range (always when alive)
+                    if (now - enemy.lastFire > enemy.fireRate * 1000) {
+                        const a = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                        enemyBullets.push({
+                            x: enemy.x, y: enemy.y,
+                            vx: Math.cos(a) * pistolState.bulletSpeed,
+                            vy: Math.sin(a) * pistolState.bulletSpeed,
+                            radius: 4, damage: enemy.damage
+                        });
+                        enemy.lastFire = now;
+                    }
+                }
             }
 
             // ========== Game loop ==========
@@ -610,28 +667,24 @@
                     if (cooldownTimer <= 0) { cooldownTimer = 0; updateDashUI(); }
                 }
 
-                // Skill cooldown
                 if (skillCooldown > 0) skillCooldown -= dt;
 
-                // Screen shake
                 if (shakeDuration > 0) {
                     shakeDuration -= dt;
                     if (shakeDuration <= 0) screenShake = 0;
                 }
-                if (skillFlashAlpha > 0) skillFlashAlpha -= dt * 2.5; // decay
+                if (skillFlashAlpha > 0) skillFlashAlpha -= dt * 2.5;
 
-                // Reload timer
                 if (isReloading) {
                     reloadTimer -= dt;
                     if (reloadTimer <= 0) finishReload();
                 }
 
-                // Recoil decay
+                // Recoil decay (greatly reduced)
                 const moveActive = moveVec.x !== 0 || moveVec.y !== 0;
-                const decayRate = moveActive ? 0.8 : 3.0;
-                const decayFactor = Math.exp(-decayRate * dt);
-                recoilVelX *= decayFactor;
-                recoilVelY *= decayFactor;
+                const decayRate = moveActive ? 0.2 : 0.8;   // previously 0.8 and 3.0
+                recoilVelX *= Math.exp(-decayRate * dt);
+                recoilVelY *= Math.exp(-decayRate * dt);
                 if (Math.abs(recoilVelX) < 0.1) recoilVelX = 0;
                 if (Math.abs(recoilVelY) < 0.1) recoilVelY = 0;
 
@@ -654,29 +707,66 @@
                     firePistol(now);
                 }
 
-                // Bullet updates & collisions
-                for (let i = bullets.length - 1; i >= 0; i--) {
-                    const b = bullets[i];
+                // Update enemies
+                updateEnemies(now, dt);
+
+                // Player bullets collisions: enemies and dummy
+                for (let i = playerBullets.length - 1; i >= 0; i--) {
+                    const b = playerBullets[i];
                     b.x += b.vx * dt;
                     b.y += b.vy * dt;
                     if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
-                        bullets.splice(i, 1); continue;
+                        playerBullets.splice(i, 1); continue;
                     }
-                    const dx = b.x - dummy.x, dy = b.y - dummy.y;
-                    if (Math.hypot(dx, dy) < dummy.radius + b.radius) {
+                    // Check enemy hits
+                    let hit = false;
+                    for (let j = enemies.length - 1; j >= 0; j--) {
+                        const e = enemies[j];
+                        if (Math.hypot(b.x - e.x, b.y - e.y) < e.radius + b.radius) {
+                            e.health -= b.damage;
+                            if (e.health <= 0) enemies.splice(j, 1);
+                            hit = true;
+                            break; // bullet can hit only one enemy
+                        }
+                    }
+                    if (hit) { playerBullets.splice(i, 1); continue; }
+                    // Dummy hit
+                    if (Math.hypot(b.x - dummy.x, b.y - dummy.y) < dummy.radius + b.radius) {
                         dummy.health = Math.max(1, dummy.health - b.damage);
-                        bullets.splice(i, 1);
+                        playerBullets.splice(i, 1);
+                    }
+                }
+
+                // Enemy bullets vs player
+                for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                    const b = enemyBullets[i];
+                    b.x += b.vx * dt;
+                    b.y += b.vy * dt;
+                    if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
+                        enemyBullets.splice(i, 1); continue;
+                    }
+                    if (Math.hypot(b.x - player.x, b.y - player.y) < player.radius + b.radius) {
+                        player.health -= b.damage;
+                        enemyBullets.splice(i, 1);
+                        if (player.health <= 0) {
+                            // reset player for testing
+                            player.health = player.maxHealth;
+                            player.x = canvas.width/2;
+                            player.y = canvas.height/2;
+                            recoilVelX = 0; recoilVelY = 0;
+                            dashActive = false;
+                        }
                     }
                 }
 
                 checkPickupProximity();
 
-                // --- Draw with screen shake ---
+                // --- Draw ---
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.save();
                 if (screenShake > 0) {
-                    const shakeX = (Math.random() * 2 - 1) * screenShake;
-                    const shakeY = (Math.random() * 2 - 1) * screenShake;
+                    const shakeX = (Math.random()*2-1)*screenShake;
+                    const shakeY = (Math.random()*2-1)*screenShake;
                     ctx.translate(shakeX, shakeY);
                 }
 
@@ -700,12 +790,8 @@
                 if (skillActive && (skillVec.x !== 0 || skillVec.y !== 0)) {
                     ctx.beginPath();
                     ctx.arc(skillTarget.x, skillTarget.y, 10, 0, Math.PI*2);
-                    ctx.fillStyle = '#00bfff';
-                    ctx.fill();
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                    // Line to target
+                    ctx.fillStyle = '#00bfff'; ctx.fill();
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
                     ctx.beginPath();
                     ctx.moveTo(player.x, player.y);
                     ctx.lineTo(skillTarget.x, skillTarget.y);
@@ -742,24 +828,46 @@
                     }
                 });
 
+                // Enemies
+                for (const enemy of enemies) {
+                    ctx.beginPath(); ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI*2);
+                    ctx.fillStyle = '#d32f2f'; ctx.fill();
+                    ctx.strokeStyle = '#b71c1c'; ctx.lineWidth = 2; ctx.stroke();
+                    // health bar
+                    const eBarW = enemy.radius*2, eBarH = 4;
+                    const eHpPct = enemy.health / 50;
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(enemy.x - eBarW/2 -1, enemy.y - enemy.radius -8 -1, eBarW+2, eBarH+2);
+                    ctx.fillStyle = eHpPct > 0.5 ? '#4caf50' : '#ff7043';
+                    ctx.fillRect(enemy.x - eBarW/2, enemy.y - enemy.radius -8, eBarW * eHpPct, eBarH);
+                }
+
                 // Bullets
                 ctx.fillStyle = '#ffdd55';
-                bullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2); ctx.fill(); });
+                playerBullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2); ctx.fill(); });
+                ctx.fillStyle = '#ff5252';
+                enemyBullets.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2); ctx.fill(); });
 
                 // Player
                 ctx.beginPath(); ctx.arc(player.x, player.y, player.radius, 0, Math.PI*2);
                 ctx.fillStyle = dashActive ? '#e63946' : '#F4A261'; ctx.fill();
                 ctx.strokeStyle = dashActive ? '#fff' : '#E76F51'; ctx.lineWidth = 3; ctx.stroke();
+                // Player health bar
+                const pBarW = player.radius*2, pBarH = 5;
+                const pHpPct = player.health / player.maxHealth;
+                ctx.fillStyle = '#333';
+                ctx.fillRect(player.x - pBarW/2 -1, player.y - player.radius -14 -1, pBarW+2, pBarH+2);
+                ctx.fillStyle = '#00e676';
+                ctx.fillRect(player.x - pBarW/2, player.y - player.radius -14, pBarW * pHpPct, pBarH);
 
-                // Flash effect overlay (skill)
                 if (skillFlashAlpha > 0) {
-                    ctx.fillStyle = `rgba(255, 255, 255, ${skillFlashAlpha})`;
+                    ctx.fillStyle = `rgba(255,255,255,${skillFlashAlpha})`;
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                 }
 
-                ctx.restore(); // end screen shake
+                ctx.restore();
 
-                // UI elements (outside shake)
+                // UI (outside shake)
                 const totalSpeed = Math.hypot(moveSpeedX, moveSpeedY);
                 let speedText = `Speed: ${Math.round(totalSpeed)} px/s`;
                 if (dashActive) speedText += ' (DASH!)';
@@ -781,12 +889,11 @@
                     ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
                 }
 
-                // Inventory (clickable, drawn on canvas)
+                // Inventory
                 const startX = 20, startY = 70, slotSize = 50, gap = 5;
                 ctx.strokeStyle = 'white'; ctx.lineWidth = 2;
                 for (let i = 0; i < 4; i++) {
                     const x = startX + i * (slotSize + gap);
-                    // Highlight if this slot's weapon is currently equipped
                     if (inventory[i] && inventory[i].name === currentWeapon) {
                         ctx.fillStyle = 'rgba(255,255,255,0.2)';
                         ctx.fillRect(x, startY, slotSize, slotSize);
