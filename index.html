@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>2D Plane | Dash, Inventory, Dummy & Pistol</title>
+    <title>2D Plane | Dash, Inventory, Dummy & Pistol v2</title>
     <style>
         body {
             margin: 0;
@@ -18,7 +18,7 @@
         }
 
         /* Movement joystick (bottom-left) */
-        .joystick-base {
+        .move-joystick-base {
             position: fixed;
             bottom: 40px;
             left: 100px;
@@ -31,7 +31,7 @@
             pointer-events: auto;
             z-index: 10;
         }
-        .joystick-thumb {
+        .move-joystick-thumb {
             position: fixed;
             bottom: 40px;
             left: 100px;
@@ -45,30 +45,30 @@
             box-shadow: 0 0 8px rgba(0,0,0,0.5);
         }
 
-        /* Shooting joystick (top-right, only when pistol equipped) */
+        /* Shooting joystick (bottom-right, above dash) */
         #shootBase {
             position: fixed;
-            top: 40px;
-            right: 100px;
+            bottom: 140px;
+            left: calc(100vw - 140px); /* center at 140px from right */
             width: 120px;
             height: 120px;
             background: rgba(255, 200, 100, 0.15);
             border: 3px solid rgba(255, 200, 100, 0.6);
             border-radius: 50%;
-            transform: translate(50%, -50%);
+            transform: translate(-50%, -50%);
             pointer-events: auto;
             z-index: 10;
             display: none;
         }
         #shootThumb {
             position: fixed;
-            top: 40px;
-            right: 100px;
+            bottom: 140px;
+            left: calc(100vw - 140px);
             width: 50px;
             height: 50px;
             background: rgba(255, 200, 100, 0.9);
             border-radius: 50%;
-            transform: translate(50%, -50%);
+            transform: translate(-50%, -50%);
             pointer-events: none;
             z-index: 11;
             box-shadow: 0 0 8px rgba(0,0,0,0.5);
@@ -129,12 +129,12 @@
     <canvas id="gameCanvas"></canvas>
 
     <!-- Movement joystick -->
-    <div class="joystick-base" id="moveBase"></div>
-    <div class="joystick-thumb" id="moveThumb"></div>
+    <div class="move-joystick-base" id="moveBase"></div>
+    <div class="move-joystick-thumb" id="moveThumb"></div>
 
-    <!-- Shooting joystick (hidden by default) -->
-    <div class="joystick-base" id="shootBase"></div>
-    <div class="joystick-thumb" id="shootThumb"></div>
+    <!-- Shooting joystick -->
+    <div id="shootBase"></div>
+    <div id="shootThumb"></div>
 
     <button id="dashButton">DASH</button>
     <button id="pickupButton">PICK UP PISTOL</button>
@@ -144,7 +144,7 @@
             const canvas = document.getElementById('gameCanvas');
             const ctx = canvas.getContext('2d');
 
-            // --- UI elements ---
+            // UI elements
             const dashButton = document.getElementById('dashButton');
             const pickupButton = document.getElementById('pickupButton');
             const moveBaseEl = document.getElementById('moveBase');
@@ -162,16 +162,16 @@
 
             // --- Player ---
             const player = {
-                x: canvas.width / 2 - 100,   // start slightly left of centre
+                x: canvas.width / 2 - 100,
                 y: canvas.height / 2,
                 radius: 18,
                 baseSpeed: 200
             };
 
-            // --- Dash mechanics (unchanged) ---
+            // --- Dash ---
             const dashDuration = 0.2;
-            const maxDashSpeed = 1000;
-            const dashDecayRate = 24;
+            const maxDashSpeed = 800;
+            const dashDecayRate = 18;
             const dashCooldown = 1.0;
             let dashActive = false;
             let dashTimer = 0;
@@ -179,18 +179,25 @@
             let cooldownTimer = 0;
 
             // --- Inventory ---
-            const inventory = [null, null, null, null];   // 4 slots
+            const inventory = [null, null, null, null];
 
-            // --- Pistol on floor ---
+            // --- Pistol & Ammo ---
             let pistolOnFloor = {
                 x: 200,
                 y: 200,
                 radius: 15,
-                active: true    // is still on the floor?
+                active: true
             };
             let pistolEquipped = false;
 
-            // --- Test dummy ---
+            const maxMagazineSize = 12;
+            let currentMagazineAmmo = maxMagazineSize;
+            let spareMagazines = 20;
+            let isReloading = false;
+            let reloadTimer = 0;
+            const reloadDuration = 1.2; // seconds
+
+            // --- Dummy ---
             const dummy = {
                 x: canvas.width / 2 + 50,
                 y: canvas.height / 2,
@@ -203,22 +210,22 @@
             const bullets = [];
             const bulletSpeed = 600;
             const bulletRadius = 5;
-            const fireRate = 0.2;          // seconds between shots
+            const fireRate = 0.45; // slower fire rate (was 0.2)
             let lastFireTime = 0;
 
-            // --- Movement joystick state ---
+            // --- Movement joystick ---
             let movePointerId = null;
             let moveBaseCenter = { x: 0, y: 0 };
             let moveMaxDist = 0;
-            let moveVec = { x: 0, y: 0 };      // -1..1
+            let moveVec = { x: 0, y: 0 };
 
-            // --- Shooting joystick state ---
+            // --- Shooting joystick ---
             let shootPointerId = null;
             let shootBaseCenter = { x: 0, y: 0 };
             let shootMaxDist = 0;
             let shootVec = { x: 0, y: 0 };
 
-            // ========== Joystick helper functions ==========
+            // ========== Joystick helpers ==========
             function updateMoveBaseDimensions() {
                 const rect = moveBaseEl.getBoundingClientRect();
                 moveBaseCenter.x = rect.left + rect.width / 2;
@@ -281,7 +288,6 @@
                 shootPointerId = null;
             }
 
-            // Initialise dimensions
             updateMoveBaseDimensions();
             updateShootBaseDimensions();
             window.addEventListener('resize', () => {
@@ -403,12 +409,14 @@
 
             function pickupPistol() {
                 if (!pistolOnFloor.active) return;
-                // Find first empty inventory slot
                 for (let i = 0; i < inventory.length; i++) {
                     if (!inventory[i]) {
                         inventory[i] = { name: 'Pistol', icon: '🔫' };
                         pistolOnFloor.active = false;
                         pistolEquipped = true;
+                        currentMagazineAmmo = maxMagazineSize;
+                        spareMagazines = 20;
+                        isReloading = false;
                         // Show shooting joystick
                         shootBaseEl.style.display = 'block';
                         shootThumbEl.style.display = 'block';
@@ -417,7 +425,7 @@
                         return;
                     }
                 }
-                // Inventory full – do nothing (or play a sound)
+                // Inventory full
             }
 
             function checkPickupProximity() {
@@ -428,18 +436,35 @@
                 const dx = player.x - pistolOnFloor.x;
                 const dy = player.y - pistolOnFloor.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
-                const pickupRange = 50;
-                if (dist < pickupRange) {
-                    pickupButton.style.display = 'block';
-                } else {
-                    pickupButton.style.display = 'none';
+                pickupButton.style.display = dist < 50 ? 'block' : 'none';
+            }
+
+            // ========== Reloading ==========
+            function startReload() {
+                if (isReloading || spareMagazines <= 0 || currentMagazineAmmo === maxMagazineSize) return;
+                isReloading = true;
+                reloadTimer = reloadDuration;
+            }
+
+            function finishReload() {
+                if (spareMagazines > 0) {
+                    spareMagazines--;
+                    currentMagazineAmmo = maxMagazineSize;
                 }
+                isReloading = false;
             }
 
             // ========== Bullet management ==========
-            function fireBullet() {
+            function tryFire(now) {
+                if (!pistolEquipped || isReloading) return;
+                if (currentMagazineAmmo <= 0) {
+                    // Auto-reload if possible
+                    startReload();
+                    return;
+                }
                 if (shootVec.x === 0 && shootVec.y === 0) return;
-                // Normalise (it already is, but just in case)
+                if (now - lastFireTime < fireRate * 1000) return;
+
                 const mag = Math.sqrt(shootVec.x * shootVec.x + shootVec.y * shootVec.y);
                 const vx = (shootVec.x / mag) * bulletSpeed;
                 const vy = (shootVec.y / mag) * bulletSpeed;
@@ -450,6 +475,13 @@
                     vy: vy,
                     radius: bulletRadius
                 });
+                currentMagazineAmmo--;
+                lastFireTime = now;
+
+                // If magazine empty after this shot, start reload
+                if (currentMagazineAmmo === 0) {
+                    startReload();
+                }
             }
 
             // ========== Game loop ==========
@@ -460,7 +492,7 @@
                 if (dt > 0.1) dt = 0.1;
                 lastTime = now;
 
-                // --- Dash timers ---
+                // Dash timers
                 if (dashActive) {
                     dashTimer += dt;
                     if (dashTimer >= dashDuration) {
@@ -477,10 +509,17 @@
                     }
                 }
 
-                // --- Movement ---
+                // Reload timer
+                if (isReloading) {
+                    reloadTimer -= dt;
+                    if (reloadTimer <= 0) {
+                        finishReload();
+                    }
+                }
+
+                // Movement
                 let moveSpeedX = moveVec.x * player.baseSpeed;
                 let moveSpeedY = moveVec.y * player.baseSpeed;
-                // Dash burst
                 if (dashActive) {
                     const dashMag = maxDashSpeed * Math.exp(-dashDecayRate * dashTimer);
                     moveSpeedX += dashDirection.x * dashMag;
@@ -488,40 +527,28 @@
                 }
                 player.x += moveSpeedX * dt;
                 player.y += moveSpeedY * dt;
-                // Keep inside canvas
                 const margin = player.radius;
                 player.x = Math.max(margin, Math.min(canvas.width - margin, player.x));
                 player.y = Math.max(margin, Math.min(canvas.height - margin, player.y));
 
-                // --- Shooting ---
-                if (pistolEquipped) {
-                    if (shootVec.x !== 0 || shootVec.y !== 0) {
-                        if (now - lastFireTime >= fireRate * 1000) {
-                            fireBullet();
-                            lastFireTime = now;
-                        }
-                    } else {
-                        // Keep lastFireTime updated to avoid burst when re-aiming
-                        lastFireTime = now - fireRate * 1000;
-                    }
+                // Shooting
+                if (pistolEquipped && shootVec.x !== 0 || shootVec.y !== 0) {
+                    tryFire(now);
                 }
 
-                // --- Bullet updates ---
+                // Bullet updates
                 for (let i = bullets.length - 1; i >= 0; i--) {
                     const b = bullets[i];
                     b.x += b.vx * dt;
                     b.y += b.vy * dt;
-                    // Remove if off canvas
                     if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
                         bullets.splice(i, 1);
                         continue;
                     }
-                    // Collision with dummy
                     const dx = b.x - dummy.x;
                     const dy = b.y - dummy.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
                     if (dist < dummy.radius + b.radius) {
-                        // Deal damage (minimum health 1)
                         if (dummy.health > 1) {
                             dummy.health = Math.max(1, dummy.health - 10);
                         }
@@ -529,13 +556,13 @@
                     }
                 }
 
-                // --- Pickup proximity check ---
+                // Pickup proximity
                 checkPickupProximity();
 
-                // --- Draw everything ---
+                // --- Draw ---
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                // Grid background
+                // Grid
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
                 ctx.lineWidth = 1;
                 const gridSize = 50;
@@ -576,7 +603,7 @@
                 ctx.fillText(`${dummy.health}/${dummy.maxHealth}`, dummy.x, barY - 4);
                 ctx.textAlign = 'start';
 
-                // Floor pistol (if not picked up)
+                // Floor pistol
                 if (pistolOnFloor.active) {
                     ctx.beginPath();
                     ctx.arc(pistolOnFloor.x, pistolOnFloor.y, pistolOnFloor.radius, 0, Math.PI * 2);
@@ -609,18 +636,33 @@
                 ctx.lineWidth = 3;
                 ctx.stroke();
 
-                // Velocity display
+                // Speed display
                 const totalSpeed = Math.sqrt(moveSpeedX * moveSpeedX + moveSpeedY * moveSpeedY);
-                const displayText = `Speed: ${Math.round(totalSpeed)} px/s` + (dashActive ? ' (DASH!)' : '');
+                const speedDisplay = `Speed: ${Math.round(totalSpeed)} px/s` + (dashActive ? ' (DASH!)' : '');
                 ctx.font = 'bold 16px monospace';
                 ctx.fillStyle = 'white';
                 ctx.shadowColor = 'black';
                 ctx.shadowBlur = 4;
-                ctx.fillText(displayText, 20, 40);
+                ctx.fillText(speedDisplay, 20, 40);
                 ctx.shadowColor = 'transparent';
                 ctx.shadowBlur = 0;
 
-                // Inventory (top-left)
+                // Ammo display (above dash button area)
+                if (pistolEquipped) {
+                    let ammoText = `${currentMagazineAmmo}/${maxMagazineSize}  |  ${spareMagazines} mags`;
+                    if (isReloading) ammoText += '  RELOADING...';
+                    ctx.font = 'bold 16px monospace';
+                    ctx.fillStyle = '#ffc107';
+                    ctx.shadowColor = 'black';
+                    ctx.shadowBlur = 4;
+                    ctx.textAlign = 'right';
+                    ctx.fillText(ammoText, canvas.width - 30, canvas.height - 80);
+                    ctx.textAlign = 'start';
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                }
+
+                // Inventory
                 drawInventory();
 
                 requestAnimationFrame(gameLoop);
@@ -643,16 +685,14 @@
                         ctx.textAlign = 'start';
                     }
                 }
-                // Label
                 ctx.font = '12px sans-serif';
                 ctx.fillStyle = 'white';
                 ctx.fillText('INVENTORY', startX, startY - 5);
             }
 
-            // Initial setup: place dummy in the middle based on canvas size
+            // Initial dummy position
             dummy.x = canvas.width / 2;
             dummy.y = canvas.height / 2;
-            // Place pistol somewhere nearby
             pistolOnFloor.x = canvas.width / 2 - 150;
             pistolOnFloor.y = canvas.height / 2 + 80;
 
