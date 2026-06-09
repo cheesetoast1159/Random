@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Top‑Down Circle with Dash & Joystick</title>
+    <title>2D Plane | Dash, Inventory, Dummy & Pistol</title>
     <style>
         body {
             margin: 0;
             overflow: hidden;
-            background: #2b2b2b;
+            background: #1a1a1a;
             touch-action: none;
             font-family: sans-serif;
         }
@@ -17,7 +17,7 @@
             background: #3a5a40;
         }
 
-        /* --- Joystick (now clearly visible on the left) --- */
+        /* Movement joystick (bottom-left) */
         .joystick-base {
             position: fixed;
             bottom: 40px;
@@ -45,21 +45,51 @@
             box-shadow: 0 0 8px rgba(0,0,0,0.5);
         }
 
-        /* --- Dash Button – now top‑right, impossible to miss --- */
+        /* Shooting joystick (top-right, only when pistol equipped) */
+        #shootBase {
+            position: fixed;
+            top: 40px;
+            right: 100px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 200, 100, 0.15);
+            border: 3px solid rgba(255, 200, 100, 0.6);
+            border-radius: 50%;
+            transform: translate(50%, -50%);
+            pointer-events: auto;
+            z-index: 10;
+            display: none;
+        }
+        #shootThumb {
+            position: fixed;
+            top: 40px;
+            right: 100px;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 200, 100, 0.9);
+            border-radius: 50%;
+            transform: translate(50%, -50%);
+            pointer-events: none;
+            z-index: 11;
+            box-shadow: 0 0 8px rgba(0,0,0,0.5);
+            display: none;
+        }
+
+        /* Dash button (bottom-right) */
         #dashButton {
             position: fixed;
-            top: 30px;                 /* clearly in view */
+            bottom: 30px;
             right: 30px;
-            padding: 22px 36px;
-            font-size: 1.3rem;
+            padding: 18px 28px;
+            font-size: 1.2rem;
             font-weight: bold;
             color: white;
             background: #e63946;
-            border: 4px solid white;   /* white border for contrast */
+            border: 4px solid white;
             border-radius: 50px;
             box-shadow: 0 0 20px rgba(0,0,0,0.6);
             cursor: pointer;
-            z-index: 100;              /* very high, above everything */
+            z-index: 100;
             transition: background 0.2s, transform 0.1s;
             user-select: none;
             touch-action: manipulation;
@@ -73,22 +103,54 @@
             pointer-events: none;
             cursor: not-allowed;
         }
+
+        /* Pickup button (bottom-center) */
+        #pickupButton {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 14px 28px;
+            font-size: 1rem;
+            font-weight: bold;
+            color: white;
+            background: #2a9d8f;
+            border: 3px solid white;
+            border-radius: 30px;
+            cursor: pointer;
+            z-index: 100;
+            display: none;
+            touch-action: manipulation;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
-    <div class="joystick-base" id="joystickBase"></div>
-    <div class="joystick-thumb" id="joystickThumb"></div>
+
+    <!-- Movement joystick -->
+    <div class="joystick-base" id="moveBase"></div>
+    <div class="joystick-thumb" id="moveThumb"></div>
+
+    <!-- Shooting joystick (hidden by default) -->
+    <div class="joystick-base" id="shootBase"></div>
+    <div class="joystick-thumb" id="shootThumb"></div>
+
     <button id="dashButton">DASH</button>
+    <button id="pickupButton">PICK UP PISTOL</button>
 
     <script>
         (function() {
             const canvas = document.getElementById('gameCanvas');
             const ctx = canvas.getContext('2d');
 
-            // Confirm the button exists (check console)
+            // --- UI elements ---
             const dashButton = document.getElementById('dashButton');
-            console.log('Dash button found:', dashButton);
+            const pickupButton = document.getElementById('pickupButton');
+            const moveBaseEl = document.getElementById('moveBase');
+            const moveThumbEl = document.getElementById('moveThumb');
+            const shootBaseEl = document.getElementById('shootBase');
+            const shootThumbEl = document.getElementById('shootThumb');
 
             // --- Canvas resize ---
             function resizeCanvas() {
@@ -100,25 +162,207 @@
 
             // --- Player ---
             const player = {
-                x: canvas.width / 2,
+                x: canvas.width / 2 - 100,   // start slightly left of centre
                 y: canvas.height / 2,
-                radius: 20,
-                speed: 200
+                radius: 18,
+                baseSpeed: 200
             };
 
-            // --- Dash mechanics ---
-            const dashDuration = 0.3;
-            const dashMultiplier = 3.5;
+            // --- Dash mechanics (unchanged) ---
+            const dashDuration = 0.2;
+            const maxDashSpeed = 1000;
+            const dashDecayRate = 24;
             const dashCooldown = 1.0;
+            let dashActive = false;
             let dashTimer = 0;
+            let dashDirection = { x: 0, y: 0 };
             let cooldownTimer = 0;
-            let currentSpeed = player.speed;
 
-            function updateDashButtonVisual() {
+            // --- Inventory ---
+            const inventory = [null, null, null, null];   // 4 slots
+
+            // --- Pistol on floor ---
+            let pistolOnFloor = {
+                x: 200,
+                y: 200,
+                radius: 15,
+                active: true    // is still on the floor?
+            };
+            let pistolEquipped = false;
+
+            // --- Test dummy ---
+            const dummy = {
+                x: canvas.width / 2 + 50,
+                y: canvas.height / 2,
+                radius: 30,
+                health: 100,
+                maxHealth: 100
+            };
+
+            // --- Bullets ---
+            const bullets = [];
+            const bulletSpeed = 600;
+            const bulletRadius = 5;
+            const fireRate = 0.2;          // seconds between shots
+            let lastFireTime = 0;
+
+            // --- Movement joystick state ---
+            let movePointerId = null;
+            let moveBaseCenter = { x: 0, y: 0 };
+            let moveMaxDist = 0;
+            let moveVec = { x: 0, y: 0 };      // -1..1
+
+            // --- Shooting joystick state ---
+            let shootPointerId = null;
+            let shootBaseCenter = { x: 0, y: 0 };
+            let shootMaxDist = 0;
+            let shootVec = { x: 0, y: 0 };
+
+            // ========== Joystick helper functions ==========
+            function updateMoveBaseDimensions() {
+                const rect = moveBaseEl.getBoundingClientRect();
+                moveBaseCenter.x = rect.left + rect.width / 2;
+                moveBaseCenter.y = rect.top + rect.height / 2;
+                moveMaxDist = (rect.width / 2) - (moveThumbEl.offsetWidth / 2);
+                if (moveMaxDist < 0) moveMaxDist = 0;
+            }
+
+            function updateShootBaseDimensions() {
+                const rect = shootBaseEl.getBoundingClientRect();
+                shootBaseCenter.x = rect.left + rect.width / 2;
+                shootBaseCenter.y = rect.top + rect.height / 2;
+                shootMaxDist = (rect.width / 2) - (shootThumbEl.offsetWidth / 2);
+                if (shootMaxDist < 0) shootMaxDist = 0;
+            }
+
+            function moveMoveThumb(clientX, clientY) {
+                let dx = clientX - moveBaseCenter.x;
+                let dy = clientY - moveBaseCenter.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > moveMaxDist) {
+                    dx = (dx / dist) * moveMaxDist;
+                    dy = (dy / dist) * moveMaxDist;
+                    dist = moveMaxDist;
+                }
+                moveThumbEl.style.left = (moveBaseCenter.x + dx) + 'px';
+                moveThumbEl.style.top = (moveBaseCenter.y + dy) + 'px';
+                moveVec.x = dist > 1 ? dx / moveMaxDist : 0;
+                moveVec.y = dist > 1 ? dy / moveMaxDist : 0;
+            }
+
+            function resetMoveThumb() {
+                moveThumbEl.style.left = moveBaseCenter.x + 'px';
+                moveThumbEl.style.top = moveBaseCenter.y + 'px';
+                moveVec.x = 0;
+                moveVec.y = 0;
+                movePointerId = null;
+            }
+
+            function moveShootThumb(clientX, clientY) {
+                let dx = clientX - shootBaseCenter.x;
+                let dy = clientY - shootBaseCenter.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > shootMaxDist) {
+                    dx = (dx / dist) * shootMaxDist;
+                    dy = (dy / dist) * shootMaxDist;
+                    dist = shootMaxDist;
+                }
+                shootThumbEl.style.left = (shootBaseCenter.x + dx) + 'px';
+                shootThumbEl.style.top = (shootBaseCenter.y + dy) + 'px';
+                shootVec.x = dist > 1 ? dx / shootMaxDist : 0;
+                shootVec.y = dist > 1 ? dy / shootMaxDist : 0;
+            }
+
+            function resetShootThumb() {
+                shootThumbEl.style.left = shootBaseCenter.x + 'px';
+                shootThumbEl.style.top = shootBaseCenter.y + 'px';
+                shootVec.x = 0;
+                shootVec.y = 0;
+                shootPointerId = null;
+            }
+
+            // Initialise dimensions
+            updateMoveBaseDimensions();
+            updateShootBaseDimensions();
+            window.addEventListener('resize', () => {
+                updateMoveBaseDimensions();
+                updateShootBaseDimensions();
+            });
+
+            // ========== Movement joystick events ==========
+            function onMoveDown(e) {
+                if (e.target === moveBaseEl && movePointerId === null) {
+                    e.preventDefault();
+                    movePointerId = e.pointerId;
+                    moveBaseEl.setPointerCapture(e.pointerId);
+                    updateMoveBaseDimensions();
+                    moveMoveThumb(e.clientX, e.clientY);
+                }
+            }
+            function onMoveMove(e) {
+                if (movePointerId === e.pointerId) {
+                    e.preventDefault();
+                    moveMoveThumb(e.clientX, e.clientY);
+                }
+            }
+            function onMoveUp(e) {
+                if (movePointerId === e.pointerId) {
+                    e.preventDefault();
+                    resetMoveThumb();
+                    moveBaseEl.releasePointerCapture(e.pointerId);
+                }
+            }
+            moveBaseEl.addEventListener('pointerdown', onMoveDown);
+            moveBaseEl.addEventListener('pointermove', onMoveMove);
+            moveBaseEl.addEventListener('pointerup', onMoveUp);
+            moveBaseEl.addEventListener('pointercancel', onMoveUp);
+            window.addEventListener('pointermove', (e) => {
+                if (movePointerId === e.pointerId) moveMoveThumb(e.clientX, e.clientY);
+            });
+            window.addEventListener('pointerup', (e) => {
+                if (movePointerId === e.pointerId) resetMoveThumb();
+            });
+
+            // ========== Shooting joystick events ==========
+            function onShootDown(e) {
+                if (e.target === shootBaseEl && shootPointerId === null && pistolEquipped) {
+                    e.preventDefault();
+                    shootPointerId = e.pointerId;
+                    shootBaseEl.setPointerCapture(e.pointerId);
+                    updateShootBaseDimensions();
+                    moveShootThumb(e.clientX, e.clientY);
+                }
+            }
+            function onShootMove(e) {
+                if (shootPointerId === e.pointerId) {
+                    e.preventDefault();
+                    moveShootThumb(e.clientX, e.clientY);
+                }
+            }
+            function onShootUp(e) {
+                if (shootPointerId === e.pointerId) {
+                    e.preventDefault();
+                    resetShootThumb();
+                    shootBaseEl.releasePointerCapture(e.pointerId);
+                }
+            }
+            shootBaseEl.addEventListener('pointerdown', onShootDown);
+            shootBaseEl.addEventListener('pointermove', onShootMove);
+            shootBaseEl.addEventListener('pointerup', onShootUp);
+            shootBaseEl.addEventListener('pointercancel', onShootUp);
+            window.addEventListener('pointermove', (e) => {
+                if (shootPointerId === e.pointerId) moveShootThumb(e.clientX, e.clientY);
+            });
+            window.addEventListener('pointerup', (e) => {
+                if (shootPointerId === e.pointerId) resetShootThumb();
+            });
+
+            // ========== Dash button ==========
+            function updateDashUI() {
                 if (cooldownTimer > 0) {
                     dashButton.textContent = 'COOLING...';
                     dashButton.classList.add('disabled');
-                } else if (dashTimer > 0) {
+                } else if (dashActive) {
                     dashButton.textContent = 'DASHING!';
                     dashButton.classList.add('disabled');
                 } else {
@@ -128,16 +372,16 @@
             }
 
             function triggerDash() {
-                if (cooldownTimer > 0 || dashTimer > 0) return;
-                // Only dash if joystick is giving input (optional, you can remove this check)
-                if (joystickVec.x === 0 && joystickVec.y === 0) return;
-
-                dashTimer = dashDuration;
-                currentSpeed = player.speed * dashMultiplier;
-                updateDashButtonVisual();
+                if (cooldownTimer > 0 || dashActive) return;
+                if (moveVec.x === 0 && moveVec.y === 0) return;
+                const mag = Math.sqrt(moveVec.x * moveVec.x + moveVec.y * moveVec.y);
+                dashDirection.x = moveVec.x / mag;
+                dashDirection.y = moveVec.y / mag;
+                dashActive = true;
+                dashTimer = 0;
+                updateDashUI();
             }
 
-            // Dash button listeners
             dashButton.addEventListener('pointerdown', (e) => {
                 e.preventDefault();
                 triggerDash();
@@ -147,94 +391,68 @@
                 triggerDash();
             });
 
-            // --- Joystick setup ---
-            const baseEl = document.getElementById('joystickBase');
-            const thumbEl = document.getElementById('joystickThumb');
+            // ========== Pickup button ==========
+            pickupButton.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                pickupPistol();
+            });
+            pickupButton.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                pickupPistol();
+            });
 
-            let activePointerId = null;
-            let baseCenter = { x: 0, y: 0 };
-            let maxDist = 0;
-            let joystickVec = { x: 0, y: 0 };
-
-            function updateBaseDimensions() {
-                const rect = baseEl.getBoundingClientRect();
-                baseCenter.x = rect.left + rect.width / 2;
-                baseCenter.y = rect.top + rect.height / 2;
-                maxDist = (rect.width / 2) - (thumbEl.offsetWidth / 2);
-                if (maxDist < 0) maxDist = 0;
-            }
-            window.addEventListener('resize', updateBaseDimensions);
-            updateBaseDimensions();
-
-            function moveThumb(clientX, clientY) {
-                let dx = clientX - baseCenter.x;
-                let dy = clientY - baseCenter.y;
-                let dist = Math.sqrt(dx * dx + dy * dy);
-
-                if (dist > maxDist) {
-                    dx = (dx / dist) * maxDist;
-                    dy = (dy / dist) * maxDist;
-                    dist = maxDist;
+            function pickupPistol() {
+                if (!pistolOnFloor.active) return;
+                // Find first empty inventory slot
+                for (let i = 0; i < inventory.length; i++) {
+                    if (!inventory[i]) {
+                        inventory[i] = { name: 'Pistol', icon: '🔫' };
+                        pistolOnFloor.active = false;
+                        pistolEquipped = true;
+                        // Show shooting joystick
+                        shootBaseEl.style.display = 'block';
+                        shootThumbEl.style.display = 'block';
+                        updateShootBaseDimensions();
+                        pickupButton.style.display = 'none';
+                        return;
+                    }
                 }
+                // Inventory full – do nothing (or play a sound)
+            }
 
-                thumbEl.style.left = (baseCenter.x + dx) + 'px';
-                thumbEl.style.top = (baseCenter.y + dy) + 'px';
-
-                if (dist > 1) {
-                    joystickVec.x = dx / maxDist;
-                    joystickVec.y = dy / maxDist;
+            function checkPickupProximity() {
+                if (!pistolOnFloor.active) {
+                    pickupButton.style.display = 'none';
+                    return;
+                }
+                const dx = player.x - pistolOnFloor.x;
+                const dy = player.y - pistolOnFloor.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const pickupRange = 50;
+                if (dist < pickupRange) {
+                    pickupButton.style.display = 'block';
                 } else {
-                    joystickVec.x = 0;
-                    joystickVec.y = 0;
+                    pickupButton.style.display = 'none';
                 }
             }
 
-            function resetThumb() {
-                thumbEl.style.left = baseCenter.x + 'px';
-                thumbEl.style.top = baseCenter.y + 'px';
-                joystickVec.x = 0;
-                joystickVec.y = 0;
-                activePointerId = null;
+            // ========== Bullet management ==========
+            function fireBullet() {
+                if (shootVec.x === 0 && shootVec.y === 0) return;
+                // Normalise (it already is, but just in case)
+                const mag = Math.sqrt(shootVec.x * shootVec.x + shootVec.y * shootVec.y);
+                const vx = (shootVec.x / mag) * bulletSpeed;
+                const vy = (shootVec.y / mag) * bulletSpeed;
+                bullets.push({
+                    x: player.x,
+                    y: player.y,
+                    vx: vx,
+                    vy: vy,
+                    radius: bulletRadius
+                });
             }
 
-            function onPointerDown(e) {
-                if (e.target === baseEl && activePointerId === null) {
-                    e.preventDefault();
-                    activePointerId = e.pointerId;
-                    baseEl.setPointerCapture(e.pointerId);
-                    updateBaseDimensions();
-                    moveThumb(e.clientX, e.clientY);
-                }
-            }
-
-            function onPointerMove(e) {
-                if (activePointerId === e.pointerId) {
-                    e.preventDefault();
-                    moveThumb(e.clientX, e.clientY);
-                }
-            }
-
-            function onPointerUp(e) {
-                if (activePointerId === e.pointerId) {
-                    e.preventDefault();
-                    resetThumb();
-                    baseEl.releasePointerCapture(e.pointerId);
-                }
-            }
-
-            baseEl.addEventListener('pointerdown', onPointerDown);
-            baseEl.addEventListener('pointermove', onPointerMove);
-            baseEl.addEventListener('pointerup', onPointerUp);
-            baseEl.addEventListener('pointercancel', onPointerUp);
-
-            window.addEventListener('pointermove', (e) => {
-                if (activePointerId === e.pointerId) moveThumb(e.clientX, e.clientY);
-            });
-            window.addEventListener('pointerup', (e) => {
-                if (activePointerId === e.pointerId) resetThumb();
-            });
-
-            // --- Game loop ---
+            // ========== Game loop ==========
             let lastTime = performance.now();
 
             function gameLoop(now) {
@@ -242,46 +460,82 @@
                 if (dt > 0.1) dt = 0.1;
                 lastTime = now;
 
-                // Update dash timers
-                if (dashTimer > 0) {
-                    dashTimer -= dt;
-                    if (dashTimer <= 0) {
-                        dashTimer = 0;
-                        currentSpeed = player.speed;
+                // --- Dash timers ---
+                if (dashActive) {
+                    dashTimer += dt;
+                    if (dashTimer >= dashDuration) {
+                        dashActive = false;
                         cooldownTimer = dashCooldown;
                     }
-                    updateDashButtonVisual();
+                    updateDashUI();
                 }
                 if (cooldownTimer > 0) {
                     cooldownTimer -= dt;
                     if (cooldownTimer <= 0) {
                         cooldownTimer = 0;
-                        updateDashButtonVisual();
+                        updateDashUI();
                     }
                 }
 
-                // Movement
-                if (joystickVec.x !== 0 || joystickVec.y !== 0) {
-                    const moveX = joystickVec.x * currentSpeed * dt;
-                    const moveY = joystickVec.y * currentSpeed * dt;
-                    player.x += moveX;
-                    player.y += moveY;
+                // --- Movement ---
+                let moveSpeedX = moveVec.x * player.baseSpeed;
+                let moveSpeedY = moveVec.y * player.baseSpeed;
+                // Dash burst
+                if (dashActive) {
+                    const dashMag = maxDashSpeed * Math.exp(-dashDecayRate * dashTimer);
+                    moveSpeedX += dashDirection.x * dashMag;
+                    moveSpeedY += dashDirection.y * dashMag;
+                }
+                player.x += moveSpeedX * dt;
+                player.y += moveSpeedY * dt;
+                // Keep inside canvas
+                const margin = player.radius;
+                player.x = Math.max(margin, Math.min(canvas.width - margin, player.x));
+                player.y = Math.max(margin, Math.min(canvas.height - margin, player.y));
 
-                    const margin = player.radius;
-                    player.x = Math.max(margin, Math.min(canvas.width - margin, player.x));
-                    player.y = Math.max(margin, Math.min(canvas.height - margin, player.y));
+                // --- Shooting ---
+                if (pistolEquipped) {
+                    if (shootVec.x !== 0 || shootVec.y !== 0) {
+                        if (now - lastFireTime >= fireRate * 1000) {
+                            fireBullet();
+                            lastFireTime = now;
+                        }
+                    } else {
+                        // Keep lastFireTime updated to avoid burst when re-aiming
+                        lastFireTime = now - fireRate * 1000;
+                    }
                 }
 
-                drawBackground();
-                drawPlayer();
-                drawVelocity();
+                // --- Bullet updates ---
+                for (let i = bullets.length - 1; i >= 0; i--) {
+                    const b = bullets[i];
+                    b.x += b.vx * dt;
+                    b.y += b.vy * dt;
+                    // Remove if off canvas
+                    if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
+                        bullets.splice(i, 1);
+                        continue;
+                    }
+                    // Collision with dummy
+                    const dx = b.x - dummy.x;
+                    const dy = b.y - dummy.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < dummy.radius + b.radius) {
+                        // Deal damage (minimum health 1)
+                        if (dummy.health > 1) {
+                            dummy.health = Math.max(1, dummy.health - 10);
+                        }
+                        bullets.splice(i, 1);
+                    }
+                }
 
-                requestAnimationFrame(gameLoop);
-            }
+                // --- Pickup proximity check ---
+                checkPickupProximity();
 
-            function drawBackground() {
+                // --- Draw everything ---
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+                // Grid background
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
                 ctx.lineWidth = 1;
                 const gridSize = 50;
@@ -297,39 +551,112 @@
                     ctx.lineTo(canvas.width, y);
                     ctx.stroke();
                 }
-            }
 
-            function drawPlayer() {
+                // Dummy
+                ctx.beginPath();
+                ctx.arc(dummy.x, dummy.y, dummy.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#6c757d';
+                ctx.fill();
+                ctx.strokeStyle = '#343a40';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                // Health bar
+                const barWidth = dummy.radius * 2;
+                const barHeight = 6;
+                const barX = dummy.x - barWidth / 2;
+                const barY = dummy.y - dummy.radius - 10;
+                const healthPercent = dummy.health / dummy.maxHealth;
+                ctx.fillStyle = '#333';
+                ctx.fillRect(barX - 1, barY - 1, barWidth + 2, barHeight + 2);
+                ctx.fillStyle = healthPercent > 0.5 ? '#2a9d8f' : '#e76f51';
+                ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+                ctx.fillStyle = 'white';
+                ctx.font = '10px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(`${dummy.health}/${dummy.maxHealth}`, dummy.x, barY - 4);
+                ctx.textAlign = 'start';
+
+                // Floor pistol (if not picked up)
+                if (pistolOnFloor.active) {
+                    ctx.beginPath();
+                    ctx.arc(pistolOnFloor.x, pistolOnFloor.y, pistolOnFloor.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = '#ffc107';
+                    ctx.fill();
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    ctx.fillStyle = '#000';
+                    ctx.font = '18px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('🔫', pistolOnFloor.x, pistolOnFloor.y + 6);
+                    ctx.textAlign = 'start';
+                }
+
+                // Bullets
+                ctx.fillStyle = '#ffdd55';
+                for (const b of bullets) {
+                    ctx.beginPath();
+                    ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Player
                 ctx.beginPath();
                 ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
-                ctx.fillStyle = dashTimer > 0 ? '#e63946' : '#F4A261';
+                ctx.fillStyle = dashActive ? '#e63946' : '#F4A261';
                 ctx.fill();
-                ctx.strokeStyle = dashTimer > 0 ? '#ffffff' : '#E76F51';
+                ctx.strokeStyle = dashActive ? '#ffffff' : '#E76F51';
                 ctx.lineWidth = 3;
                 ctx.stroke();
 
-                ctx.shadowColor = 'rgba(0,0,0,0.3)';
-                ctx.shadowBlur = 8;
-                ctx.fill();
-                ctx.shadowColor = 'transparent';
-                ctx.shadowBlur = 0;
-            }
-
-            function drawVelocity() {
-                const speedText = Math.round(currentSpeed);
-                const dashStatus = dashTimer > 0 ? ' (DASH!)' : '';
-                const display = `Speed: ${speedText} px/s${dashStatus}`;
-
-                ctx.font = 'bold 18px monospace';
+                // Velocity display
+                const totalSpeed = Math.sqrt(moveSpeedX * moveSpeedX + moveSpeedY * moveSpeedY);
+                const displayText = `Speed: ${Math.round(totalSpeed)} px/s` + (dashActive ? ' (DASH!)' : '');
+                ctx.font = 'bold 16px monospace';
                 ctx.fillStyle = 'white';
                 ctx.shadowColor = 'black';
                 ctx.shadowBlur = 4;
-                ctx.fillText(display, 20, 40);
+                ctx.fillText(displayText, 20, 40);
                 ctx.shadowColor = 'transparent';
                 ctx.shadowBlur = 0;
+
+                // Inventory (top-left)
+                drawInventory();
+
+                requestAnimationFrame(gameLoop);
             }
 
-            updateDashButtonVisual();
+            function drawInventory() {
+                const startX = 20;
+                const startY = 70;
+                const slotSize = 50;
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2;
+                for (let i = 0; i < 4; i++) {
+                    const x = startX + i * (slotSize + 5);
+                    ctx.strokeRect(x, startY, slotSize, slotSize);
+                    if (inventory[i]) {
+                        ctx.font = '24px sans-serif';
+                        ctx.fillStyle = 'white';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(inventory[i].icon, x + slotSize/2, startY + slotSize/2 + 8);
+                        ctx.textAlign = 'start';
+                    }
+                }
+                // Label
+                ctx.font = '12px sans-serif';
+                ctx.fillStyle = 'white';
+                ctx.fillText('INVENTORY', startX, startY - 5);
+            }
+
+            // Initial setup: place dummy in the middle based on canvas size
+            dummy.x = canvas.width / 2;
+            dummy.y = canvas.height / 2;
+            // Place pistol somewhere nearby
+            pistolOnFloor.x = canvas.width / 2 - 150;
+            pistolOnFloor.y = canvas.height / 2 + 80;
+
+            updateDashUI();
             requestAnimationFrame(gameLoop);
         })();
     </script>
