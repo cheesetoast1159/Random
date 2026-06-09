@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Infinite Plane | Houses, Sniper & Zoom</title>
+    <title>Infinite Plane | Sniper Beam, Zoom Out & Shake</title>
     <style>
         body {
             margin: 0;
@@ -273,7 +273,6 @@
                         if (dummy && Math.hypot(x - dummy.worldX, y - dummy.worldY) < 100) valid = false;
                     } while (!valid);
 
-                    // decide shape: single block or L‑shape (two rectangles)
                     const shape = Math.random() < 0.5 ? 'single' : 'L';
                     const rects = [];
                     const baseW = 60 + Math.random() * 40;
@@ -281,20 +280,17 @@
                     if (shape === 'single') {
                         rects.push({ x: x - baseW/2, y: y - baseH/2, w: baseW, h: baseH });
                     } else {
-                        // L‑shape: two rectangles sharing a corner
                         const secondW = 40 + Math.random() * 30;
                         const secondH = 40 + Math.random() * 30;
-                        // placement relative to base
                         rects.push({ x: x - baseW/2, y: y - baseH/2, w: baseW, h: baseH });
-                        // second rectangle attached to one side (random orientation)
-                        const side = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
-                        if (side === 0) { // top
+                        const side = Math.floor(Math.random() * 4);
+                        if (side === 0) {
                             rects.push({ x: x - secondW/2, y: y - baseH/2 - secondH, w: secondW, h: secondH });
-                        } else if (side === 1) { // right
+                        } else if (side === 1) {
                             rects.push({ x: x + baseW/2, y: y - secondH/2, w: secondW, h: secondH });
-                        } else if (side === 2) { // bottom
+                        } else if (side === 2) {
                             rects.push({ x: x - secondW/2, y: y + baseH/2, w: secondW, h: secondH });
-                        } else { // left
+                        } else {
                             rects.push({ x: x - baseW/2 - secondW, y: y - secondH/2, w: secondW, h: secondH });
                         }
                     }
@@ -304,12 +300,12 @@
             generateHouses();
 
             // --- Sniper accuracy state ---
-            let sniperSpread = 0.3; // current spread in radians (starts wide)
+            let sniperSpread = 0.3;
             const SNIPER_MAX_SPREAD = 0.3;
             const SNIPER_MIN_SPREAD = 0.0;
-            const SNIPER_SPREAD_RECOVERY = 0.3; // rad per second reduction
-            let sniperAimAngle = 0; // current oscillating angle offset
-            const SNIPER_OSCILLATION_SPEED = 2.5; // speed of oscillation
+            const SNIPER_SPREAD_RECOVERY = 0.3;
+            let sniperAimAngle = 0;
+            const SNIPER_OSCILLATION_SPEED = 2.5;
 
             // --- Effects ---
             let screenShake = 0, shakeDuration = 0;
@@ -331,7 +327,7 @@
             let skillActive = false;
             let skillTargetWorld = { x: 0, y: 0 };
 
-            // ========== Joystick helpers (same as before) ==========
+            // ========== Joystick helpers ==========
             function updateMoveBase() {
                 const rect = moveBaseEl.getBoundingClientRect();
                 moveBaseCenter.x = rect.left + rect.width / 2;
@@ -569,7 +565,7 @@
                     skillBaseEl.style.display = 'none';
                     skillThumbEl.style.display = 'none';
                 }
-                if (type === 'sniper') sniperSpread = SNIPER_MAX_SPREAD; // reset spread
+                if (type === 'sniper') sniperSpread = SNIPER_MAX_SPREAD;
             }
 
             canvas.addEventListener('pointerdown', (e) => {
@@ -640,7 +636,7 @@
                 const mag = Math.hypot(shootVec.x, shootVec.y);
                 const vx = (shootVec.x / mag) * state.bulletSpeed;
                 const vy = (shootVec.y / mag) * state.bulletSpeed;
-                playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx, vy, radius: 5, damage: state.damage });
+                playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx, vy, radius: 5, damage: state.damage, isBeam: false });
                 state.ammo--;
                 lastFireTime = now;
                 if (state.ammo === 0) startReload();
@@ -655,7 +651,7 @@
                 for (let i = 0; i < state.pellets; i++) {
                     const angle = Math.atan2(dirY, dirX) + (Math.random()*2-1)*state.spreadAngle;
                     const speed = state.bulletSpeed + (Math.random()*100-50);
-                    playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 3, damage: state.damage });
+                    playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 3, damage: state.damage, isBeam: false });
                 }
                 state.ammo--;
                 recoilVelX = -dirX * state.recoilForce;
@@ -668,13 +664,15 @@
                 if (isReloading || state.ammo <= 0) { if (state.ammo === 0) startReload(); return; }
                 const mag = Math.hypot(shootVec.x, shootVec.y);
                 const baseAngle = Math.atan2(shootVec.y, shootVec.x);
-                // actual bullet angle = baseAngle + sniperAimAngle (oscillation)
                 const fireAngle = baseAngle + sniperAimAngle;
                 const vx = Math.cos(fireAngle) * state.bulletSpeed;
                 const vy = Math.sin(fireAngle) * state.bulletSpeed;
-                playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx, vy, radius: 4, damage: state.damage });
+                playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx, vy, radius: 4, damage: state.damage, isBeam: true });
                 state.ammo--;
                 lastFireTime = performance.now();
+                // Screen shake for sniper
+                screenShake = 6;
+                shakeDuration = 0.15;
                 if (state.ammo === 0) startReload();
             }
 
@@ -687,7 +685,7 @@
                 for (let i = 0; i < bulletCount; i++) {
                     const angle = (i / bulletCount) * Math.PI * 2;
                     const speed = shotgunState.bulletSpeed;
-                    playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 4, damage: shotgunState.damage * 0.7 });
+                    playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 4, damage: shotgunState.damage * 0.7, isBeam: false });
                 }
                 screenShake = 10;
                 shakeDuration = 0.3;
@@ -794,7 +792,6 @@
                     } else {
                         sniperSpread = SNIPER_MAX_SPREAD;
                     }
-                    // Update oscillation: time-based
                     sniperAimAngle = Math.sin(now * 0.001 * SNIPER_OSCILLATION_SPEED) * (sniperSpread / 2);
                 }
 
@@ -896,13 +893,11 @@
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.save();
 
-                // Camera zoom for sniper aim
-                let zoomFactor = 1.0;
+                // Camera zoom for sniper aim (zoom out to see more)
                 if (currentWeapon === 'sniper' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) {
-                    zoomFactor = 1.4; // zoom out (smaller numbers = zoom in, larger = out)
                     const playerScreen = { x: player.worldX + cameraOffsetX, y: player.worldY + cameraOffsetY };
                     ctx.translate(playerScreen.x, playerScreen.y);
-                    ctx.scale(zoomFactor, zoomFactor);
+                    ctx.scale(0.65, 0.65);   // zoom out
                     ctx.translate(-playerScreen.x, -playerScreen.y);
                 }
 
@@ -912,9 +907,11 @@
                     ctx.translate(shakeX, shakeY);
                 }
 
-                // Draw houses
-                function toScreen(wx, wy) { return { x: wx + cameraOffsetX, y: wy + cameraOffsetY }; }
+                function toScreen(wx, wy) {
+                    return { x: wx + cameraOffsetX, y: wy + cameraOffsetY };
+                }
 
+                // Draw houses
                 for (const house of houses) {
                     for (const rect of house) {
                         const s = toScreen(rect.x, rect.y);
@@ -931,7 +928,6 @@
                     const baseAngle = Math.atan2(shootVec.y, shootVec.x);
                     const fanLength = 1500;
                     const pScreen = toScreen(player.worldX, player.worldY);
-                    // Draw spread fan
                     ctx.save();
                     ctx.globalAlpha = 0.2;
                     ctx.fillStyle = '#00ffff';
@@ -941,11 +937,9 @@
                     ctx.closePath();
                     ctx.fill();
                     ctx.globalAlpha = 1;
-                    // draw outline of fan
                     ctx.strokeStyle = '#00ffff';
                     ctx.lineWidth = 1;
                     ctx.stroke();
-                    // Draw oscillation line
                     const aimAngle = baseAngle + sniperAimAngle;
                     const endX = pScreen.x + Math.cos(aimAngle) * fanLength;
                     const endY = pScreen.y + Math.sin(aimAngle) * fanLength;
@@ -960,7 +954,7 @@
                     ctx.restore();
                 }
 
-                // Shotgun aim fan (if not sniper)
+                // Shotgun aim fan
                 if (currentWeapon === 'shotgun' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0) && !isReloading) {
                     const aimAngle = Math.atan2(shootVec.y, shootVec.x);
                     const halfSpread = shotgunState.spreadAngle;
@@ -1033,9 +1027,35 @@
 
                 // Bullets
                 ctx.fillStyle = '#ffdd55';
-                playerBullets.forEach(b => { const s = toScreen(b.worldX, b.worldY); ctx.beginPath(); ctx.arc(s.x, s.y, b.radius, 0, Math.PI*2); ctx.fill(); });
+                for (const b of playerBullets) {
+                    const s = toScreen(b.worldX, b.worldY);
+                    if (b.isBeam) {
+                        // Draw beam line from bullet position backwards
+                        const angle = Math.atan2(b.vy, b.vx);
+                        const beamLength = 40;
+                        const startX = s.x - Math.cos(angle) * beamLength;
+                        const startY = s.y - Math.sin(angle) * beamLength;
+                        ctx.beginPath();
+                        ctx.moveTo(startX, startY);
+                        ctx.lineTo(s.x, s.y);
+                        ctx.strokeStyle = '#00ffff';
+                        ctx.lineWidth = 4;
+                        ctx.shadowBlur = 8;
+                        ctx.shadowColor = '#00ffff';
+                        ctx.stroke();
+                        ctx.shadowBlur = 0;
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(s.x, s.y, b.radius, 0, Math.PI*2);
+                        ctx.fill();
+                    }
+                }
+
                 ctx.fillStyle = '#ff5252';
-                enemyBullets.forEach(b => { const s = toScreen(b.worldX, b.worldY); ctx.beginPath(); ctx.arc(s.x, s.y, b.radius, 0, Math.PI*2); ctx.fill(); });
+                enemyBullets.forEach(b => {
+                    const s = toScreen(b.worldX, b.worldY);
+                    ctx.beginPath(); ctx.arc(s.x, s.y, b.radius, 0, Math.PI*2); ctx.fill();
+                });
 
                 // Player
                 const playerScreen = toScreen(player.worldX, player.worldY);
@@ -1054,9 +1074,9 @@
                     ctx.fillRect(0, 0, canvas.width, canvas.height);
                 }
 
-                ctx.restore(); // end zoom/shake
+                ctx.restore();
 
-                // UI (outside zoom)
+                // UI (unaffected by zoom)
                 const totalSpeed = Math.hypot(worldMoveVelX, worldMoveVelY);
                 let speedText = `Speed: ${Math.round(totalSpeed)} px/s`;
                 if (dashActive) speedText += ' (DASH!)';
