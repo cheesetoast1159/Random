@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>2D Plane | Dash, Inventory, Dummy & Pistol v2</title>
+    <title>2D Plane | Dash, Inventory, Dummy & Pistol v3</title>
     <style>
         body {
             margin: 0;
@@ -45,11 +45,11 @@
             box-shadow: 0 0 8px rgba(0,0,0,0.5);
         }
 
-        /* Shooting joystick (bottom-right, above dash) */
+        /* Shooting joystick (bottom-right, well above dash) */
         #shootBase {
             position: fixed;
-            bottom: 140px;
-            left: calc(100vw - 140px); /* center at 140px from right */
+            bottom: 230px;                    /* raised significantly */
+            left: calc(100vw - 140px);
             width: 120px;
             height: 120px;
             background: rgba(255, 200, 100, 0.15);
@@ -62,7 +62,7 @@
         }
         #shootThumb {
             position: fixed;
-            bottom: 140px;
+            bottom: 230px;
             left: calc(100vw - 140px);
             width: 50px;
             height: 50px;
@@ -169,9 +169,9 @@
             };
 
             // --- Dash ---
-            const dashDuration = 0.3;
+            const dashDuration = 0.35;
             const maxDashSpeed = 2000;
-            const dashDecayRate = 24;
+            const dashDecayRate = 18;
             const dashCooldown = 1.0;
             let dashActive = false;
             let dashTimer = 0;
@@ -195,7 +195,7 @@
             let spareMagazines = 20;
             let isReloading = false;
             let reloadTimer = 0;
-            const reloadDuration = 1.2; // seconds
+            const reloadDuration = 1.2;
 
             // --- Dummy ---
             const dummy = {
@@ -210,7 +210,7 @@
             const bullets = [];
             const bulletSpeed = 600;
             const bulletRadius = 5;
-            const fireRate = 0.45; // slower fire rate (was 0.2)
+            const fireRate = 0.45;
             let lastFireTime = 0;
 
             // --- Movement joystick ---
@@ -425,7 +425,6 @@
                         return;
                     }
                 }
-                // Inventory full
             }
 
             function checkPickupProximity() {
@@ -458,7 +457,6 @@
             function tryFire(now) {
                 if (!pistolEquipped || isReloading) return;
                 if (currentMagazineAmmo <= 0) {
-                    // Auto-reload if possible
                     startReload();
                     return;
                 }
@@ -478,7 +476,6 @@
                 currentMagazineAmmo--;
                 lastFireTime = now;
 
-                // If magazine empty after this shot, start reload
                 if (currentMagazineAmmo === 0) {
                     startReload();
                 }
@@ -532,7 +529,7 @@
                 player.y = Math.max(margin, Math.min(canvas.height - margin, player.y));
 
                 // Shooting
-                if (pistolEquipped && shootVec.x !== 0 || shootVec.y !== 0) {
+                if (pistolEquipped && (shootVec.x !== 0 || shootVec.y !== 0)) {
                     tryFire(now);
                 }
 
@@ -577,6 +574,21 @@
                     ctx.moveTo(0, y);
                     ctx.lineTo(canvas.width, y);
                     ctx.stroke();
+                }
+
+                // Aiming line (drawn before player so it appears behind, but actually we can draw after)
+                if (pistolEquipped && (shootVec.x !== 0 || shootVec.y !== 0) && !isReloading) {
+                    const aimLength = 50;
+                    const endX = player.x + shootVec.x * aimLength;
+                    const endY = player.y + shootVec.y * aimLength;
+                    ctx.beginPath();
+                    ctx.moveTo(player.x, player.y);
+                    ctx.lineTo(endX, endY);
+                    ctx.strokeStyle = '#ffdd55';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    ctx.stroke();
+                    ctx.setLineDash([]); // reset
                 }
 
                 // Dummy
@@ -647,7 +659,7 @@
                 ctx.shadowColor = 'transparent';
                 ctx.shadowBlur = 0;
 
-                // Ammo display (above dash button area)
+                // Ammo display (bottom‑right, above dash)
                 if (pistolEquipped) {
                     let ammoText = `${currentMagazineAmmo}/${maxMagazineSize}  |  ${spareMagazines} mags`;
                     if (isReloading) ammoText += '  RELOADING...';
@@ -690,7 +702,7 @@
                 ctx.fillText('INVENTORY', startX, startY - 5);
             }
 
-            // Initial dummy position
+            // Initial positions
             dummy.x = canvas.width / 2;
             dummy.y = canvas.height / 2;
             pistolOnFloor.x = canvas.width / 2 - 150;
