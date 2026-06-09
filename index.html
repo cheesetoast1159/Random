@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Infinite Plane | Player‑Centering Camera</title>
+    <title>Infinite Plane | Houses, Plain Floor, Soft Camera</title>
     <style>
         body {
             margin: 0;
@@ -203,19 +203,19 @@
             // --- Infinite world: camera offsets ---
             let cameraOffsetX = 0;
             let cameraOffsetY = 0;
-            const CAMERA_FOLLOW_SPEED = 4.0;   // strength of centering pull
+            const CAMERA_FOLLOW_SPEED = 1.5;   // reduced pull strength
 
             // --- Player (world coordinates) ---
             const player = {
                 worldX: canvas.width / 2,
                 worldY: canvas.height / 2,
                 radius: 18,
-                baseSpeed: 280,           // increased movement speed
+                baseSpeed: 280,
                 health: 100,
                 maxHealth: 100
             };
 
-            // --- Dash (normal decay) ---
+            // --- Dash ---
             const dashDuration = 0.2;
             const maxDashSpeed = 800;
             const dashDecayRate = 18;
@@ -237,7 +237,7 @@
             let skillCooldown = 0;
             const skillCooldownDuration = 1.0;
 
-            // --- Recoil (normal decay) ---
+            // --- Recoil ---
             let recoilVelX = 0, recoilVelY = 0;
 
             // --- Floor items (world coordinates) ---
@@ -253,10 +253,34 @@
                 maxHealth: 100
             };
 
-            // --- Bullets (world space) ---
+            // --- Bullets & enemies ---
             const playerBullets = [];
             const enemyBullets = [];
             const enemies = [];
+
+            // --- Random houses (static obstacles) ---
+            const houses = [];
+            function generateHouses() {
+                const numHouses = 30;
+                for (let i = 0; i < numHouses; i++) {
+                    let x, y, valid;
+                    do {
+                        x = (Math.random() - 0.5) * 2000;
+                        y = (Math.random() - 0.5) * 2000;
+                        valid = true;
+                        // avoid spawning too close to player start
+                        if (Math.hypot(x - player.worldX, y - player.worldY) < 150) valid = false;
+                        // avoid dummy
+                        if (Math.hypot(x - dummy.worldX, y - dummy.worldY) < 100) valid = false;
+                        // avoid pickups
+                        if (pistolOnFloor.active && Math.hypot(x - pistolOnFloor.worldX, y - pistolOnFloor.worldY) < 100) valid = false;
+                        if (shotgunOnFloor.active && Math.hypot(x - shotgunOnFloor.worldX, y - shotgunOnFloor.worldY) < 100) valid = false;
+                        // avoid too close to other houses (optional)
+                    } while (!valid);
+                    houses.push({ worldX: x, worldY: y, radius: 40 });
+                }
+            }
+            generateHouses();
 
             // --- Effects ---
             let screenShake = 0, shakeDuration = 0;
@@ -382,7 +406,7 @@
                 if (movePointerId === e.pointerId) resetMoveThumb();
             });
 
-            // ========== Shooting & Skill joystick events (as before) ==========
+            // ========== Shooting & Skill joystick events ==========
             shootBaseEl.addEventListener('pointerdown', (e) => {
                 if (e.target === shootBaseEl && shootPointerId === null && currentWeapon) {
                     e.preventDefault();
@@ -552,6 +576,22 @@
                 isReloading = false;
             }
 
+            // ========== Collision resolution with houses ==========
+            function resolveHouseCollisions(entity) {
+                for (const house of houses) {
+                    const dx = entity.worldX - house.worldX;
+                    const dy = entity.worldY - house.worldY;
+                    const dist = Math.hypot(dx, dy);
+                    const minDist = entity.radius + house.radius;
+                    if (dist < minDist) {
+                        const angle = Math.atan2(dy, dx);
+                        const overlap = minDist - dist;
+                        entity.worldX += Math.cos(angle) * overlap;
+                        entity.worldY += Math.sin(angle) * overlap;
+                    }
+                }
+            }
+
             // ========== Firing (world space) ==========
             function firePistol(now) {
                 const state = pistolState;
@@ -588,6 +628,7 @@
                 if (skillCooldown > 0) return;
                 player.worldX = skillTargetWorld.x;
                 player.worldY = skillTargetWorld.y;
+                resolveHouseCollisions(player); // prevent teleporting into a house
                 const bulletCount = 32;
                 for (let i = 0; i < bulletCount; i++) {
                     const angle = (i / bulletCount) * Math.PI * 2;
@@ -602,17 +643,22 @@
 
             // ========== Enemy logic ==========
             function spawnEnemy() {
-                let worldX, worldY;
+                let worldX, worldY, valid;
                 do {
                     worldX = player.worldX + (Math.random() - 0.5) * 800;
                     worldY = player.worldY + (Math.random() - 0.5) * 800;
-                } while (Math.hypot(worldX - player.worldX, worldY - player.worldY) < 300);
+                    valid = true;
+                    if (Math.hypot(worldX - player.worldX, worldY - player.worldY) < 200) valid = false;
+                    for (const house of houses) {
+                        if (Math.hypot(worldX - house.worldX, worldY - house.worldY) < 100) valid = false;
+                    }
+                } while (!valid);
                 enemies.push({
                     worldX, worldY,
                     radius: 18,
                     health: 50,
                     speed: 120,
-                    fireRate: 2.6,
+                    fireRate: 0.6,
                     lastFire: performance.now(),
                     damage: pistolState.damage
                 });
@@ -632,6 +678,7 @@
                         enemy.worldX += Math.cos(angle) * enemy.speed * dt;
                         enemy.worldY += Math.sin(angle) * enemy.speed * dt;
                     }
+                    resolveHouseCollisions(enemy); // enemies also respect houses
                     if (now - enemy.lastFire > enemy.fireRate * 1000) {
                         const a = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
                         enemyBullets.push({
@@ -676,7 +723,7 @@
                     if (reloadTimer <= 0) finishReload();
                 }
 
-                // Recoil decay (normal)
+                // Recoil decay
                 const moveActive = moveVec.x !== 0 || moveVec.y !== 0;
                 const decayRate = moveActive ? 0.8 : 3.0;
                 recoilVelX *= Math.exp(-decayRate * dt);
@@ -697,14 +744,16 @@
                 player.worldX += worldMoveVelX * dt;
                 player.worldY += worldMoveVelY * dt;
 
-                // Camera centering: map scrolls to bring player toward screen center
+                // Collide with houses
+                resolveHouseCollisions(player);
+
+                // Camera centering (soft pull)
                 const centerX = canvas.width / 2;
                 const centerY = canvas.height / 2;
                 const screenX = player.worldX + cameraOffsetX;
                 const screenY = player.worldY + cameraOffsetY;
                 const dx = screenX - centerX;
                 const dy = screenY - centerY;
-                // Adjust camera offset proportional to distance from center
                 cameraOffsetX -= dx * CAMERA_FOLLOW_SPEED * dt;
                 cameraOffsetY -= dy * CAMERA_FOLLOW_SPEED * dt;
 
@@ -716,11 +765,21 @@
                 // Enemies
                 updateEnemies(now, dt);
 
-                // Player bullets (world space)
+                // Player bullets collisions
                 for (let i = playerBullets.length - 1; i >= 0; i--) {
                     const b = playerBullets[i];
                     b.worldX += b.vx * dt;
                     b.worldY += b.vy * dt;
+                    // Check house collisions? Bullets can pass through or collide? We'll make them collide with houses and disappear.
+                    let remove = false;
+                    for (const house of houses) {
+                        if (Math.hypot(b.worldX - house.worldX, b.worldY - house.worldY) < b.radius + house.radius) {
+                            remove = true;
+                            break;
+                        }
+                    }
+                    if (remove) { playerBullets.splice(i, 1); continue; }
+
                     let hit = false;
                     for (let j = enemies.length - 1; j >= 0; j--) {
                         const e = enemies[j];
@@ -743,6 +802,15 @@
                     const b = enemyBullets[i];
                     b.worldX += b.vx * dt;
                     b.worldY += b.vy * dt;
+                    // Collide with houses
+                    let remove = false;
+                    for (const house of houses) {
+                        if (Math.hypot(b.worldX - house.worldX, b.worldY - house.worldY) < b.radius + house.radius) {
+                            remove = true;
+                            break;
+                        }
+                    }
+                    if (remove) { enemyBullets.splice(i, 1); continue; }
                     if (Math.hypot(b.worldX - player.worldX, b.worldY - player.worldY) < player.radius + b.radius) {
                         player.health -= b.damage;
                         enemyBullets.splice(i, 1);
@@ -760,8 +828,10 @@
 
                 checkPickupProximity();
 
-                // --- Draw with camera offset ---
+                // --- Draw (plain floor, no grid) ---
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
+                // Background already solid #3a5a40 via canvas style
+
                 ctx.save();
                 if (screenShake > 0) {
                     const shakeX = (Math.random()*2-1)*screenShake;
@@ -769,21 +839,18 @@
                     ctx.translate(shakeX, shakeY);
                 }
 
-                // Grid (scrolls with world)
-                const gridSize = 50;
-                ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-                ctx.lineWidth = 1;
-                const startGridX = ((-cameraOffsetX % gridSize) + gridSize) % gridSize;
-                const startGridY = ((-cameraOffsetY % gridSize) + gridSize) % gridSize;
-                for (let x = startGridX; x < canvas.width + gridSize; x += gridSize) {
-                    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
-                }
-                for (let y = startGridY; y < canvas.height + gridSize; y += gridSize) {
-                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-                }
+                // Draw houses
+                function toScreen(wx, wy) { return { x: wx + cameraOffsetX, y: wy + cameraOffsetY }; }
 
-                function toScreen(wx, wy) {
-                    return { x: wx + cameraOffsetX, y: wy + cameraOffsetY };
+                for (const house of houses) {
+                    const s = toScreen(house.worldX, house.worldY);
+                    ctx.beginPath();
+                    ctx.arc(s.x, s.y, house.radius, 0, Math.PI*2);
+                    ctx.fillStyle = '#8B5A2B'; // brown
+                    ctx.fill();
+                    ctx.strokeStyle = '#5C4033';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
                 }
 
                 // Shotgun aim fan
@@ -882,7 +949,7 @@
 
                 ctx.restore();
 
-                // UI (outside shake)
+                // UI
                 const totalSpeed = Math.hypot(worldMoveVelX, worldMoveVelY);
                 let speedText = `Speed: ${Math.round(totalSpeed)} px/s`;
                 if (dashActive) speedText += ' (DASH!)';
