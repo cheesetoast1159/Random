@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Infinite Plane | Sword & Pistol Enemies, Dodging, Melee</title>
+    <title>Infinite Plane | Sniper Rifle, Smoke Grenade & More</title>
     <style>
         body {
             margin: 0;
@@ -73,6 +73,7 @@
             display: none;
         }
 
+        /* Skill joystick (shared) */
         #skillBase {
             position: fixed;
             bottom: 370px;
@@ -254,8 +255,9 @@
             let isReloading = false, reloadTimer = 0;
             let lastFireTime = 0;
 
+            // --- Skill cooldown (shared) ---
             let skillCooldown = 0;
-            const skillCooldownDuration = 1.0;
+            let skillCooldownDuration = 0; // set based on weapon
 
             // --- Recoil ---
             let recoilVelX = 0, recoilVelY = 0;
@@ -274,10 +276,11 @@
                 maxHealth: 100
             };
 
-            // --- Bullets & enemies ---
+            // --- Bullets, enemies, smoke clouds ---
             const playerBullets = [];
             const enemyBullets = [];
             const enemies = [];
+            const smokeClouds = []; // { worldX, worldY, radius, duration, timer }
 
             // --- Houses (rectangles, L‑shapes) ---
             const houses = [];
@@ -341,6 +344,7 @@
             let shootVec = { x: 0, y: 0 };
             let shootActive = false;
 
+            // Skill joystick (shared for shotgun and sniper)
             let skillPointerId = null;
             let skillBaseCenter = { x: 0, y: 0 }, skillMaxDist = 0;
             let skillVec = { x: 0, y: 0 };
@@ -409,10 +413,10 @@
                 skillVec.x = dist > 1 ? dx / skillMaxDist : 0;
                 skillVec.y = dist > 1 ? dy / skillMaxDist : 0;
                 if (dist > 0) {
-                    const dashDist = 120;
+                    const range = currentWeapon === 'shotgun' ? 120 : 200; // smoke grenade range slightly longer
                     const mag = Math.hypot(skillVec.x, skillVec.y);
-                    skillTargetWorld.x = player.worldX + (skillVec.x / mag) * dashDist;
-                    skillTargetWorld.y = player.worldY + (skillVec.y / mag) * dashDist;
+                    skillTargetWorld.x = player.worldX + (skillVec.x / mag) * range;
+                    skillTargetWorld.y = player.worldY + (skillVec.y / mag) * range;
                 }
             }
             function resetSkillThumb() {
@@ -469,11 +473,8 @@
                 if (shootPointerId === e.pointerId) {
                     e.preventDefault();
                     if (shootActive && shootVec.x !== 0 && shootVec.y !== 0) {
-                        if (currentWeapon === 'shotgun') {
-                            fireShotgun();
-                        } else if (currentWeapon === 'sniper') {
-                            fireSniper();
-                        }
+                        if (currentWeapon === 'shotgun') fireShotgun();
+                        else if (currentWeapon === 'sniper') fireSniper();
                     }
                     resetShootThumb();
                     shootBaseEl.releasePointerCapture(e.pointerId);
@@ -494,8 +495,9 @@
                 }
             });
 
+            // Skill joystick (works for both shotgun and sniper)
             skillBaseEl.addEventListener('pointerdown', (e) => {
-                if (e.target === skillBaseEl && skillPointerId === null && currentWeapon === 'shotgun' && skillCooldown <= 0) {
+                if (e.target === skillBaseEl && skillPointerId === null && (currentWeapon === 'shotgun' || currentWeapon === 'sniper') && skillCooldown <= 0) {
                     e.preventDefault();
                     skillPointerId = e.pointerId;
                     skillBaseEl.setPointerCapture(e.pointerId);
@@ -511,7 +513,8 @@
                 if (skillPointerId === e.pointerId) {
                     e.preventDefault();
                     if (skillActive && (skillVec.x !== 0 || skillVec.y !== 0)) {
-                        executeShotgunSkill();
+                        if (currentWeapon === 'shotgun') executeShotgunSkill();
+                        else if (currentWeapon === 'sniper') executeSniperSkill();
                     }
                     resetSkillThumb();
                     skillBaseEl.releasePointerCapture(e.pointerId);
@@ -524,7 +527,10 @@
             });
             window.addEventListener('pointerup', (e) => {
                 if (skillPointerId === e.pointerId) {
-                    if (skillActive && (skillVec.x !== 0 || skillVec.y !== 0)) executeShotgunSkill();
+                    if (skillActive && (skillVec.x !== 0 || skillVec.y !== 0)) {
+                        if (currentWeapon === 'shotgun') executeShotgunSkill();
+                        else if (currentWeapon === 'sniper') executeSniperSkill();
+                    }
                     resetSkillThumb();
                 }
             });
@@ -577,10 +583,13 @@
             function equipWeapon(type) {
                 currentWeapon = type;
                 isReloading = false;
-                if (type === 'shotgun') {
+                // Show/hide skill joystick based on weapon skills
+                if (type === 'shotgun' || type === 'sniper') {
                     skillBaseEl.style.display = 'block';
                     skillThumbEl.style.display = 'block';
                     updateSkillBase();
+                    skillCooldownDuration = type === 'shotgun' ? 1.0 : 8.0; // shotgun 1s, sniper 8s
+                    skillCooldown = 0;
                 } else {
                     skillBaseEl.style.display = 'none';
                     skillThumbEl.style.display = 'none';
@@ -647,7 +656,7 @@
                 }
             }
 
-            // ========== Firing functions (with source weapon tag) ==========
+            // ========== Firing functions ==========
             function firePistol(now) {
                 const state = pistolState;
                 if (isReloading || state.ammo <= 0) { if (state.ammo === 0) startReload(); return false; }
@@ -697,6 +706,7 @@
                 if (state.ammo === 0) startReload();
             }
 
+            // Shotgun skill
             function executeShotgunSkill() {
                 if (skillCooldown > 0) return;
                 player.worldX = skillTargetWorld.x;
@@ -711,6 +721,23 @@
                 screenShake = 10;
                 shakeDuration = 0.3;
                 skillFlashAlpha = 0.6;
+                skillCooldown = skillCooldownDuration;
+            }
+
+            // Sniper skill: smoke grenade
+            function executeSniperSkill() {
+                if (skillCooldown > 0) return;
+                // Create smoke cloud at target
+                smokeClouds.push({
+                    worldX: skillTargetWorld.x,
+                    worldY: skillTargetWorld.y,
+                    radius: 100,
+                    duration: 5.0, // seconds
+                    timer: 5.0
+                });
+                // Small visual feedback
+                screenShake = 3;
+                shakeDuration = 0.1;
                 skillCooldown = skillCooldownDuration;
             }
 
@@ -757,7 +784,7 @@
                 enemies.push({
                     type: 'sword',
                     worldX, worldY,
-                    radius: 14,            // much smaller
+                    radius: 14,
                     health: 70,
                     speed: 160,
                     meleeDamage: 30,
@@ -768,7 +795,7 @@
                     dodgeCooldown: 0,
                     dodgeSpeed: 350,
                     dodgeDirection: { x: 0, y: 0 },
-                    hitFlash: 0            // timer for red flash on melee hit
+                    hitFlash: 0
                 });
             }
 
@@ -777,6 +804,29 @@
             spawnSwordButton.addEventListener('pointerdown', (e) => { e.preventDefault(); spawnSwordEnemy(); });
             spawnSwordButton.addEventListener('touchstart', (e) => { e.preventDefault(); spawnSwordEnemy(); });
 
+            // --- Helper: check if line between two world points passes through any smoke cloud ---
+            function isLineInSmoke(x1, y1, x2, y2) {
+                for (const cloud of smokeClouds) {
+                    if (cloud.timer <= 0) continue;
+                    // Circle-line intersection test
+                    const cx = cloud.worldX, cy = cloud.worldY, r = cloud.radius;
+                    const dx = x2 - x1, dy = y2 - y1;
+                    const fx = x1 - cx, fy = y1 - cy;
+                    const a = dx*dx + dy*dy;
+                    const b = 2*(fx*dx + fy*dy);
+                    const c = fx*fx + fy*fy - r*r;
+                    const discriminant = b*b - 4*a*c;
+                    if (discriminant >= 0) {
+                        const t1 = (-b - Math.sqrt(discriminant))/(2*a);
+                        const t2 = (-b + Math.sqrt(discriminant))/(2*a);
+                        if ((t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1) || (t1 < 0 && t2 > 1)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
             // ========== Enemy AI ==========
             function updateEnemies(now, dt) {
                 for (const enemy of enemies) {
@@ -784,29 +834,36 @@
                     const dy = player.worldY - enemy.worldY;
                     const dist = Math.hypot(dx, dy);
 
+                    // Check if vision is blocked by smoke
+                    const canSeePlayer = !isLineInSmoke(enemy.worldX, enemy.worldY, player.worldX, player.worldY);
+
                     if (enemy.type === 'pistol') {
-                        const minDist = 150;
-                        if (dist > minDist + 5) {
-                            const angle = Math.atan2(dy, dx);
-                            enemy.worldX += Math.cos(angle) * enemy.speed * dt;
-                            enemy.worldY += Math.sin(angle) * enemy.speed * dt;
-                        }
-                        resolveHouseCollisions(enemy);
-                        if (dist < enemy.visionRange && now - enemy.lastFire > enemy.fireRate * 1000) {
-                            const a = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
-                            enemyBullets.push({
-                                worldX: enemy.worldX, worldY: enemy.worldY,
-                                vx: Math.cos(a) * pistolState.bulletSpeed,
-                                vy: Math.sin(a) * pistolState.bulletSpeed,
-                                radius: 4, damage: enemy.damage
-                            });
-                            enemy.lastFire = now;
+                        if (canSeePlayer) {
+                            const minDist = 150;
+                            if (dist > minDist + 5) {
+                                const angle = Math.atan2(dy, dx);
+                                enemy.worldX += Math.cos(angle) * enemy.speed * dt;
+                                enemy.worldY += Math.sin(angle) * enemy.speed * dt;
+                            }
+                            resolveHouseCollisions(enemy);
+                            if (dist < enemy.visionRange && now - enemy.lastFire > enemy.fireRate * 1000) {
+                                const a = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
+                                enemyBullets.push({
+                                    worldX: enemy.worldX, worldY: enemy.worldY,
+                                    vx: Math.cos(a) * pistolState.bulletSpeed,
+                                    vy: Math.sin(a) * pistolState.bulletSpeed,
+                                    radius: 4, damage: enemy.damage
+                                });
+                                enemy.lastFire = now;
+                            }
+                        } else {
+                            // Blind: do nothing (stand still)
                         }
                     } else if (enemy.type === 'sword') {
                         // Hit flash decay
                         if (enemy.hitFlash > 0) enemy.hitFlash -= dt;
 
-                        // Dodge logic (now also dodges pistol bullets)
+                        // Dodge logic (can dodge even if smoke, as bullet is close)
                         if (!enemy.dodging && enemy.dodgeCooldown <= 0) {
                             for (const b of playerBullets) {
                                 if (b.sourceWeapon === 'shotgun' || b.sourceWeapon === 'pistol') {
@@ -836,22 +893,23 @@
                                 enemy.worldX += enemy.dodgeDirection.x * enemy.dodgeSpeed * dt;
                                 enemy.worldY += enemy.dodgeDirection.y * enemy.dodgeSpeed * dt;
                             }
-                        } else {
+                        } else if (canSeePlayer) {
                             if (dist > 10) {
                                 const angle = Math.atan2(dy, dx);
                                 enemy.worldX += Math.cos(angle) * enemy.speed * dt;
                                 enemy.worldY += Math.sin(angle) * enemy.speed * dt;
                             }
                         }
+                        // else blind: stay still
 
                         if (enemy.dodgeCooldown > 0) enemy.dodgeCooldown -= dt;
                         resolveHouseCollisions(enemy);
 
-                        // Melee damage & flash
-                        if (dist < player.radius + enemy.radius && now - (enemy.lastMelee || 0) > enemy.meleeCooldown * 1000) {
+                        // Melee only if can see player and close enough
+                        if (canSeePlayer && dist < player.radius + enemy.radius && now - (enemy.lastMelee || 0) > enemy.meleeCooldown * 1000) {
                             player.health -= enemy.meleeDamage;
                             enemy.lastMelee = now;
-                            enemy.hitFlash = 0.15; // brief red flash
+                            enemy.hitFlash = 0.15;
                             const angle = Math.atan2(dy, dx);
                             recoilVelX -= Math.cos(angle) * 200;
                             recoilVelY -= Math.sin(angle) * 200;
@@ -878,14 +936,17 @@
                     if (cooldownTimer <= 0) { cooldownTimer = 0; updateDashUI(); }
                 }
 
+                // Skill cooldown
                 if (skillCooldown > 0) skillCooldown -= dt;
 
+                // Effects
                 if (shakeDuration > 0) {
                     shakeDuration -= dt;
                     if (shakeDuration <= 0) screenShake = 0;
                 }
                 if (skillFlashAlpha > 0) skillFlashAlpha -= dt * 2.5;
 
+                // Reload
                 if (isReloading) {
                     reloadTimer -= dt;
                     if (reloadTimer <= 0) finishReload();
@@ -899,7 +960,7 @@
                 if (Math.abs(recoilVelX) < 0.1) recoilVelX = 0;
                 if (Math.abs(recoilVelY) < 0.1) recoilVelY = 0;
 
-                // Sniper spread update
+                // Sniper spread
                 const playerMoving = moveVec.x !== 0 || moveVec.y !== 0 || Math.abs(recoilVelX) > 5 || Math.abs(recoilVelY) > 5;
                 if (currentWeapon === 'sniper') {
                     if (!playerMoving) {
@@ -929,6 +990,15 @@
                 cameraOffsetX -= (screenX - centerX) * CAMERA_FOLLOW_SPEED * dt;
                 cameraOffsetY -= (screenY - centerY) * CAMERA_FOLLOW_SPEED * dt;
 
+                // Smoke clouds update
+                for (const cloud of smokeClouds) {
+                    cloud.timer -= dt;
+                }
+                // Remove expired
+                for (let i = smokeClouds.length - 1; i >= 0; i--) {
+                    if (smokeClouds[i].timer <= 0) smokeClouds.splice(i, 1);
+                }
+
                 // Shooting (pistol auto)
                 if (currentWeapon === 'pistol' && shootActive) {
                     firePistol(now);
@@ -957,16 +1027,6 @@
                     for (let j = enemies.length - 1; j >= 0; j--) {
                         const e = enemies[j];
                         if (Math.hypot(b.worldX - e.worldX, b.worldY - e.worldY) < e.radius + b.radius) {
-                            // Sword dodge logic: if not inside player radius, sniper hits anyway, but pistol/shotgun might have been dodged
-                            if (e.type === 'sword') {
-                                const distToPlayer = Math.hypot(player.worldX - e.worldX, player.worldY - e.worldY);
-                                // If player is inside melee radius, all bullets hit regardless
-                                if (distToPlayer > player.radius + e.radius) {
-                                    // Outside melee range: if bullet is sniper, it always hits (too fast).
-                                    // For pistol/shotgun, the dodge mechanic already physically moved enemy away.
-                                    // Since collision detection is accurate, if the bullet still overlaps after dodge, it hits.
-                                }
-                            }
                             e.health -= b.damage;
                             if (e.health <= 0) enemies.splice(j, 1);
                             hit = true;
@@ -1018,6 +1078,7 @@
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.save();
 
+                // Sniper aim zoom out
                 if (currentWeapon === 'sniper' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) {
                     const playerScreen = { x: player.worldX + cameraOffsetX, y: player.worldY + cameraOffsetY };
                     ctx.translate(playerScreen.x, playerScreen.y);
@@ -1046,6 +1107,17 @@
                         ctx.strokeRect(s.x, s.y, rect.w, rect.h);
                     }
                 }
+
+                // Draw smoke clouds
+                ctx.globalAlpha = 0.35;
+                ctx.fillStyle = '#808080';
+                for (const cloud of smokeClouds) {
+                    const s = toScreen(cloud.worldX, cloud.worldY);
+                    ctx.beginPath();
+                    ctx.arc(s.x, s.y, cloud.radius, 0, Math.PI*2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1.0;
 
                 // Sniper fan & oscillation
                 if (currentWeapon === 'sniper' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0) && !isReloading) {
@@ -1095,12 +1167,15 @@
                     const playerScreen = toScreen(player.worldX, player.worldY);
                     ctx.beginPath();
                     ctx.arc(targetScreen.x, targetScreen.y, 10, 0, Math.PI*2);
-                    ctx.fillStyle = '#00bfff'; ctx.fill();
-                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+                    ctx.fillStyle = currentWeapon === 'sniper' ? '#808080' : '#00bfff'; // grey for smoke, blue for dash
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
                     ctx.beginPath();
                     ctx.moveTo(playerScreen.x, playerScreen.y);
                     ctx.lineTo(targetScreen.x, targetScreen.y);
-                    ctx.strokeStyle = '#00bfff';
+                    ctx.strokeStyle = currentWeapon === 'sniper' ? '#808080' : '#00bfff';
                     ctx.lineWidth = 2;
                     ctx.setLineDash([5, 5]);
                     ctx.stroke();
@@ -1139,12 +1214,10 @@
                 for (const enemy of enemies) {
                     const s = toScreen(enemy.worldX, enemy.worldY);
                     ctx.beginPath(); ctx.arc(s.x, s.y, enemy.radius, 0, Math.PI*2);
-
                     if (enemy.type === 'pistol') {
                         ctx.fillStyle = '#d32f2f';
                         ctx.strokeStyle = '#b71c1c';
                     } else {
-                        // Flash red on melee hit
                         ctx.fillStyle = enemy.hitFlash > 0 ? '#ff0000' : '#ff9800';
                         ctx.strokeStyle = '#e65100';
                     }
@@ -1152,7 +1225,6 @@
                     ctx.lineWidth = 2;
                     ctx.stroke();
 
-                    // Sword visual for sword enemy
                     if (enemy.type === 'sword') {
                         const angleToPlayer = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
                         const swordLength = enemy.radius + 6;
@@ -1164,18 +1236,13 @@
                         ctx.strokeStyle = '#cccccc';
                         ctx.lineWidth = 3;
                         ctx.stroke();
-                        // crossguard
-                        const perpX = -Math.sin(angleToPlayer);
-                        const perpY = Math.cos(angleToPlayer);
-                        const guardHalf = 5;
+                        const perpX = -Math.sin(angleToPlayer), perpY = Math.cos(angleToPlayer);
                         ctx.beginPath();
-                        ctx.moveTo(s.x + perpX * guardHalf, s.y + perpY * guardHalf);
-                        ctx.lineTo(s.x - perpX * guardHalf, s.y - perpY * guardHalf);
+                        ctx.moveTo(s.x + perpX*5, s.y + perpY*5);
+                        ctx.lineTo(s.x - perpX*5, s.y - perpY*5);
                         ctx.strokeStyle = '#999999';
                         ctx.lineWidth = 2;
                         ctx.stroke();
-
-                        // Slash effect on hit flash
                         if (enemy.hitFlash > 0) {
                             ctx.save();
                             ctx.globalAlpha = enemy.hitFlash * 2;
@@ -1188,7 +1255,6 @@
                         }
                     }
 
-                    // Health bar
                     const eBarW = enemy.radius*2, eBarH = 4;
                     const maxHp = enemy.type === 'pistol' ? 50 : 70;
                     const eHpPct = enemy.health / maxHp;
@@ -1229,11 +1295,42 @@
                     ctx.beginPath(); ctx.arc(s.x, s.y, b.radius, 0, Math.PI*2); ctx.fill();
                 });
 
-                // Player
+                // Player with sniper rifle visual
                 const playerScreen = toScreen(player.worldX, player.worldY);
+                // Determine rifle direction: if aiming, use shootVec; else if moving, use moveVec; else default right
+                let rifleAngle = 0; // right
+                if (currentWeapon === 'sniper' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) {
+                    rifleAngle = Math.atan2(shootVec.y, shootVec.x);
+                } else if (moveVec.x !== 0 || moveVec.y !== 0) {
+                    rifleAngle = Math.atan2(moveVec.y, moveVec.x);
+                }
+                // Draw player circle
                 ctx.beginPath(); ctx.arc(playerScreen.x, playerScreen.y, player.radius, 0, Math.PI*2);
-                ctx.fillStyle = dashActive ? '#e63946' : '#F4A261'; ctx.fill();
-                ctx.strokeStyle = dashActive ? '#fff' : '#E76F51'; ctx.lineWidth = 3; ctx.stroke();
+                ctx.fillStyle = dashActive ? '#e63946' : '#F4A261';
+                ctx.fill();
+                ctx.strokeStyle = dashActive ? '#fff' : '#E76F51';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // Sniper rifle visual if weapon is sniper
+                if (currentWeapon === 'sniper') {
+                    const gunLength = 25;
+                    const gunEndX = playerScreen.x + Math.cos(rifleAngle) * gunLength;
+                    const gunEndY = playerScreen.y + Math.sin(rifleAngle) * gunLength;
+                    ctx.beginPath();
+                    ctx.moveTo(playerScreen.x, playerScreen.y);
+                    ctx.lineTo(gunEndX, gunEndY);
+                    ctx.strokeStyle = '#444';
+                    ctx.lineWidth = 5;
+                    ctx.stroke();
+                    // scope
+                    ctx.beginPath();
+                    ctx.arc(gunEndX, gunEndY, 4, 0, Math.PI*2);
+                    ctx.fillStyle = '#333';
+                    ctx.fill();
+                }
+
+                // Player health bar
                 const pBarW = player.radius*2, pBarH = 5;
                 const pHpPct = player.health / player.maxHealth;
                 ctx.fillStyle = '#333';
