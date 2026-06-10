@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Infinite Plane | Random Smoke Puffs & More</title>
+    <title>Infinite Plane | Connected Big Smoke & More</title>
     <style>
         body {
             margin: 0;
@@ -720,7 +720,7 @@
                 skillCooldown = skillCooldownDuration;
             }
 
-            // Sniper skill: throw grenade block that bursts into random puffs
+            // Sniper skill: throw grenade that creates a large connected smoke cloud
             function executeSniperSkill() {
                 if (skillCooldown > 0) return;
                 const angle = Math.atan2(skillTargetWorld.y - player.worldY, skillTargetWorld.x - player.worldX);
@@ -804,7 +804,7 @@
             // --- Helper: check if line between two points passes through any smoke cloud ---
             function isLineInSmoke(x1, y1, x2, y2) {
                 for (const puff of smokeClouds) {
-                    if (puff.delay > 0 || puff.timer <= 0) continue; // not active yet or faded
+                    if (puff.delay > 0 || puff.timer <= 0) continue;
                     const cx = puff.worldX, cy = puff.worldY, r = puff.radius;
                     const dx = x2 - x1, dy = y2 - y1;
                     const fx = x1 - cx, fy = y1 - cy;
@@ -979,21 +979,21 @@
                     g.worldY += g.vy * dt;
                     const dist = Math.hypot(g.worldX - g.targetX, g.worldY - g.targetY);
                     if (dist < 20) {
-                        // Burst into random smoke puffs covering a larger area
-                        const puffCount = 14;
-                        const maxRadius = 130; // spread area
+                        // Create a dense, connected smoke cloud: many large overlapping circles
+                        const puffCount = 18;
+                        const maxSpread = 50; // tight cluster so they all overlap heavily
                         for (let j = 0; j < puffCount; j++) {
                             const angle = Math.random() * Math.PI * 2;
-                            const offset = Math.random() * maxRadius;
+                            const offset = Math.random() * maxSpread;
                             const puffWorldX = g.targetX + Math.cos(angle) * offset;
                             const puffWorldY = g.targetY + Math.sin(angle) * offset;
-                            const puffRadius = 30 + Math.random() * 25; // variety
-                            const delay = Math.random() * 0.3; // staggered delays
+                            const puffRadius = 65 + Math.random() * 40; // big circles (65-105)
+                            const delay = Math.random() * 0.2; // quick burst
                             smokeClouds.push({
                                 worldX: puffWorldX,
                                 worldY: puffWorldY,
                                 radius: puffRadius,
-                                timer: 3.0,        // slightly longer
+                                timer: 5.0,
                                 delay: delay
                             });
                         }
@@ -1009,7 +1009,6 @@
                     }
                     puff.timer -= dt;
                 }
-                // Remove expired puffs
                 for (let i = smokeClouds.length - 1; i >= 0; i--) {
                     if (smokeClouds[i].delay <= 0 && smokeClouds[i].timer <= 0) {
                         smokeClouds.splice(i, 1);
@@ -1123,7 +1122,7 @@
                     }
                 }
 
-                // Draw smoke clouds (only after delay expired)
+                // Draw smoke clouds (connected large puffs)
                 for (const puff of smokeClouds) {
                     if (puff.delay > 0 || puff.timer <= 0) continue;
                     const s = toScreen(puff.worldX, puff.worldY);
@@ -1136,7 +1135,7 @@
                 }
                 ctx.globalAlpha = 1.0;
 
-                // Draw grenades (traveling block)
+                // Draw grenades
                 for (const g of grenades) {
                     const s = toScreen(g.worldX, g.worldY);
                     ctx.fillStyle = '#333';
