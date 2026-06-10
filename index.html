@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Infinite Plane | Connected Big Smoke & More</title>
+    <title>Infinite Plane | Dagger Dash, Sniper, Smoke & More</title>
     <style>
+        /* ... (CSS unchanged) ... */
         body {
             margin: 0;
             overflow: hidden;
@@ -234,7 +235,7 @@
                 maxHealth: 100
             };
 
-            // --- Dash ---
+            // --- Dash (movement ability) ---
             const dashDuration = 0.2;
             const maxDashSpeed = 800;
             const dashDecayRate = 18;
@@ -250,6 +251,7 @@
             const pistolState = { ammo: 12, maxAmmo: 12, spare: 20, reloadTime: 1.2, fireRate: 0.45, bulletSpeed: 600, damage: 10 };
             const shotgunState = { ammo: 8, maxAmmo: 8, spare: 20, reloadTime: 1.8, pellets: 8, spreadAngle: Math.PI / 9, bulletSpeed: 500, damage: 8, recoilForce: 400 };
             const sniperState = { ammo: 5, maxAmmo: 5, spare: 10, reloadTime: 2.0, fireRate: 1.5, bulletSpeed: 3000, damage: 35, recoilForce: 600 };
+            const daggerState = { damage: 25, dashDistance: 120, dashDuration: 0.12, cooldown: 0.7 }; // dash attack
 
             let isReloading = false, reloadTimer = 0;
             let lastFireTime = 0;
@@ -257,13 +259,21 @@
             let skillCooldown = 0;
             let skillCooldownDuration = 0;
 
+            // Dagger dash attack state
+            let daggerDashing = false;
+            let daggerDashTimer = 0;
+            let daggerDashDirection = { x: 0, y: 0 };
+            let daggerDashSpeed = 0;
+            let daggerCooldown = 0;
+
             // --- Recoil ---
             let recoilVelX = 0, recoilVelY = 0;
 
             // --- Floor items ---
-            let pistolOnFloor = { worldX: canvas.width/2 - 200, worldY: canvas.height/2 + 80, radius: 15, active: true, type: 'pistol' };
-            let shotgunOnFloor = { worldX: canvas.width/2 + 200, worldY: canvas.height/2 + 80, radius: 15, active: true, type: 'shotgun' };
-            let sniperOnFloor = { worldX: canvas.width/2, worldY: canvas.height/2 - 150, radius: 15, active: true, type: 'sniper' };
+            let pistolOnFloor = { worldX: canvas.width/2 - 250, worldY: canvas.height/2 + 100, radius: 15, active: true, type: 'pistol' };
+            let shotgunOnFloor = { worldX: canvas.width/2 + 250, worldY: canvas.height/2 + 100, radius: 15, active: true, type: 'shotgun' };
+            let sniperOnFloor = { worldX: canvas.width/2, worldY: canvas.height/2 - 180, radius: 15, active: true, type: 'sniper' };
+            let daggerOnFloor = { worldX: canvas.width/2 - 100, worldY: canvas.height/2 - 80, radius: 15, active: true, type: 'dagger' };
 
             // --- Dummy ---
             const dummy = {
@@ -349,7 +359,7 @@
             let skillActive = false;
             let skillTargetWorld = { x: 0, y: 0 };
 
-            // ========== Joystick helpers ==========
+            // ========== Joystick helpers (unchanged) ==========
             function updateMoveBase() {
                 const rect = moveBaseEl.getBoundingClientRect();
                 moveBaseCenter.x = rect.left + rect.width / 2;
@@ -470,9 +480,16 @@
             const shootUp = (e) => {
                 if (shootPointerId === e.pointerId) {
                     e.preventDefault();
-                    if (shootActive && shootVec.x !== 0 && shootVec.y !== 0) {
-                        if (currentWeapon === 'shotgun') fireShotgun();
-                        else if (currentWeapon === 'sniper') fireSniper();
+                    if (shootActive) {
+                        if (currentWeapon === 'dagger') {
+                            // Dagger: trigger dash attack if direction given
+                            if (shootVec.x !== 0 || shootVec.y !== 0) {
+                                triggerDaggerDash();
+                            }
+                        } else if (shootVec.x !== 0 || shootVec.y !== 0) {
+                            if (currentWeapon === 'shotgun') fireShotgun();
+                            else if (currentWeapon === 'sniper') fireSniper();
+                        }
                     }
                     resetShootThumb();
                     shootBaseEl.releasePointerCapture(e.pointerId);
@@ -485,9 +502,13 @@
             });
             window.addEventListener('pointerup', (e) => {
                 if (shootPointerId === e.pointerId) {
-                    if (shootActive && shootVec.x !== 0 && shootVec.y !== 0) {
-                        if (currentWeapon === 'shotgun') fireShotgun();
-                        else if (currentWeapon === 'sniper') fireSniper();
+                    if (shootActive) {
+                        if (currentWeapon === 'dagger') {
+                            if (shootVec.x !== 0 || shootVec.y !== 0) triggerDaggerDash();
+                        } else if (shootVec.x !== 0 || shootVec.y !== 0) {
+                            if (currentWeapon === 'shotgun') fireShotgun();
+                            else if (currentWeapon === 'sniper') fireSniper();
+                        }
                     }
                     resetShootThumb();
                 }
@@ -532,7 +553,7 @@
                 }
             });
 
-            // ========== Dash ==========
+            // ========== Dash (movement ability) ==========
             function updateDashUI() {
                 if (cooldownTimer > 0) { dashButton.textContent = 'COOLING...'; dashButton.classList.add('disabled'); }
                 else if (dashActive) { dashButton.textContent = 'DASHING!'; dashButton.classList.add('disabled'); }
@@ -556,7 +577,7 @@
 
             function handlePickup() {
                 let nearestItem = null, nearestDist = Infinity;
-                const items = [pistolOnFloor, shotgunOnFloor, sniperOnFloor].filter(i => i.active);
+                const items = [pistolOnFloor, shotgunOnFloor, sniperOnFloor, daggerOnFloor].filter(i => i.active);
                 for (const item of items) {
                     const d = Math.hypot(player.worldX - item.worldX, player.worldY - item.worldY);
                     if (d < nearestDist) { nearestDist = d; nearestItem = item; }
@@ -567,8 +588,8 @@
             function pickupWeapon(item) {
                 const slot = inventory.findIndex(s => !s);
                 if (slot === -1) return;
-                const icon = item.type === 'pistol' ? '🔫' : (item.type === 'shotgun' ? '🖖' : '🔭');
-                inventory[slot] = { name: item.type, icon };
+                const iconMap = { pistol: '🔫', shotgun: '🖖', sniper: '🔭', dagger: '🗡️' };
+                inventory[slot] = { name: item.type, icon: iconMap[item.type] };
                 item.active = false;
                 if (!currentWeapon) equipWeapon(item.type);
                 shootBaseEl.style.display = 'block';
@@ -580,6 +601,8 @@
             function equipWeapon(type) {
                 currentWeapon = type;
                 isReloading = false;
+                daggerDashing = false; // cancel any ongoing dash
+                // Show/hide skill joystick based on weapon skills
                 if (type === 'shotgun' || type === 'sniper') {
                     skillBaseEl.style.display = 'block';
                     skillThumbEl.style.display = 'block';
@@ -610,7 +633,7 @@
 
             function checkPickupProximity() {
                 let near = false;
-                [pistolOnFloor, shotgunOnFloor, sniperOnFloor].forEach(item => {
+                [pistolOnFloor, shotgunOnFloor, sniperOnFloor, daggerOnFloor].forEach(item => {
                     if (item.active && Math.hypot(player.worldX - item.worldX, player.worldY - item.worldY) < 50) near = true;
                 });
                 pickupButton.style.display = near ? 'block' : 'none';
@@ -618,7 +641,7 @@
 
             // ========== Reload ==========
             function startReload() {
-                if (isReloading) return;
+                if (isReloading || currentWeapon === 'dagger') return; // dagger doesn't reload
                 const state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
                 if (state.ammo >= state.maxAmmo || state.spare <= 0) return;
                 isReloading = true;
@@ -652,8 +675,26 @@
                 }
             }
 
-            // ========== Firing functions ==========
+            // --- Dagger dash attack ---
+            function triggerDaggerDash() {
+                if (daggerDashing || daggerCooldown > 0 || currentWeapon !== 'dagger') return;
+                const mag = Math.hypot(shootVec.x, shootVec.y);
+                if (mag === 0) return;
+                const dirX = shootVec.x / mag;
+                const dirY = shootVec.y / mag;
+                daggerDashDirection.x = dirX;
+                daggerDashDirection.y = dirY;
+                daggerDashSpeed = daggerState.dashDistance / daggerState.dashDuration; // px/s
+                daggerDashing = true;
+                daggerDashTimer = daggerState.dashDuration;
+                // small screen effect
+                screenShake = 3;
+                shakeDuration = 0.1;
+            }
+
+            // ========== Firing functions (unchanged except adding dagger handling) ==========
             function firePistol(now) {
+                if (currentWeapon !== 'pistol') return false;
                 const state = pistolState;
                 if (isReloading || state.ammo <= 0) { if (state.ammo === 0) startReload(); return false; }
                 if (now - lastFireTime < state.fireRate * 1000) return false;
@@ -720,7 +761,7 @@
                 skillCooldown = skillCooldownDuration;
             }
 
-            // Sniper skill: throw grenade that creates a large connected smoke cloud
+            // Sniper skill: throw grenade (unchanged)
             function executeSniperSkill() {
                 if (skillCooldown > 0) return;
                 const angle = Math.atan2(skillTargetWorld.y - player.worldY, skillTargetWorld.x - player.worldX);
@@ -824,7 +865,7 @@
                 return false;
             }
 
-            // ========== Enemy AI ==========
+            // ========== Enemy AI (unchanged) ==========
             function updateEnemies(now, dt) {
                 for (const enemy of enemies) {
                     const dx = player.worldX - enemy.worldX;
@@ -926,6 +967,7 @@
                 }
 
                 if (skillCooldown > 0) skillCooldown -= dt;
+                if (daggerCooldown > 0) daggerCooldown -= dt;
 
                 if (shakeDuration > 0) {
                     shakeDuration -= dt;
@@ -955,6 +997,34 @@
                     sniperAimAngle = Math.sin(now * 0.001 * SNIPER_OSCILLATION_SPEED) * (sniperSpread / 2);
                 }
 
+                // --- Dagger dash attack update ---
+                if (daggerDashing) {
+                    daggerDashTimer -= dt;
+                    if (daggerDashTimer <= 0) {
+                        daggerDashing = false;
+                        daggerDashTimer = 0;
+                        daggerCooldown = daggerState.cooldown;
+                    } else {
+                        const moveX = daggerDashDirection.x * daggerDashSpeed * dt;
+                        const moveY = daggerDashDirection.y * daggerDashSpeed * dt;
+                        player.worldX += moveX;
+                        player.worldY += moveY;
+                        resolveHouseCollisions(player); // stop at houses
+                        // Damage enemies along the path (check collision with all enemies)
+                        for (let j = enemies.length - 1; j >= 0; j--) {
+                            const e = enemies[j];
+                            const dist = Math.hypot(player.worldX - e.worldX, player.worldY - e.worldY);
+                            if (dist < player.radius + e.radius) {
+                                e.health -= daggerState.damage;
+                                if (e.health <= 0) enemies.splice(j, 1);
+                                // slight knockback? not necessary
+                            }
+                        }
+                    }
+                }
+
+                // Normal movement (only if not dagger dashing, or even if dashing? We'll add dagger dash velocity on top of normal? 
+                // To keep simple, we just apply dagger dash separate from normal movement; normal movement still applies from joytick.
                 let worldMoveVelX = moveVec.x * player.baseSpeed + recoilVelX;
                 let worldMoveVelY = moveVec.y * player.baseSpeed + recoilVelY;
                 if (dashActive) {
@@ -962,33 +1032,39 @@
                     worldMoveVelX += dashDirection.x * dashMag;
                     worldMoveVelY += dashDirection.y * dashMag;
                 }
-                player.worldX += worldMoveVelX * dt;
-                player.worldY += worldMoveVelY * dt;
-                resolveHouseCollisions(player);
+                // Apply normal movement (if not dagger dashing, the dagger dash already moved player above; 
+                // but we should still apply normal movement each frame. To avoid double movement, we need to skip normal movement if dagger dashing? 
+                // Actually, the dagger dash is a burst, we want to let player also move normally while dashing? Probably not. 
+                // So we'll skip normal movement update when daggerDashing is true.
+                if (!daggerDashing) {
+                    player.worldX += worldMoveVelX * dt;
+                    player.worldY += worldMoveVelY * dt;
+                    resolveHouseCollisions(player);
+                }
 
+                // Camera centering
                 const centerX = canvas.width / 2, centerY = canvas.height / 2;
                 const screenX = player.worldX + cameraOffsetX;
                 const screenY = player.worldY + cameraOffsetY;
                 cameraOffsetX -= (screenX - centerX) * CAMERA_FOLLOW_SPEED * dt;
                 cameraOffsetY -= (screenY - centerY) * CAMERA_FOLLOW_SPEED * dt;
 
-                // Update grenades
+                // Update grenades (unchanged)
                 for (let i = grenades.length - 1; i >= 0; i--) {
                     const g = grenades[i];
                     g.worldX += g.vx * dt;
                     g.worldY += g.vy * dt;
                     const dist = Math.hypot(g.worldX - g.targetX, g.worldY - g.targetY);
                     if (dist < 20) {
-                        // Create a dense, connected smoke cloud: many large overlapping circles
                         const puffCount = 18;
-                        const maxSpread = 50; // tight cluster so they all overlap heavily
+                        const maxSpread = 50;
                         for (let j = 0; j < puffCount; j++) {
                             const angle = Math.random() * Math.PI * 2;
                             const offset = Math.random() * maxSpread;
                             const puffWorldX = g.targetX + Math.cos(angle) * offset;
                             const puffWorldY = g.targetY + Math.sin(angle) * offset;
-                            const puffRadius = 65 + Math.random() * 40; // big circles (65-105)
-                            const delay = Math.random() * 0.2; // quick burst
+                            const puffRadius = 65 + Math.random() * 40;
+                            const delay = Math.random() * 0.2;
                             smokeClouds.push({
                                 worldX: puffWorldX,
                                 worldY: puffWorldY,
@@ -1001,21 +1077,16 @@
                     }
                 }
 
-                // Update smoke clouds (apply delay, then countdown)
                 for (const puff of smokeClouds) {
-                    if (puff.delay > 0) {
-                        puff.delay -= dt;
-                        continue;
-                    }
+                    if (puff.delay > 0) { puff.delay -= dt; continue; }
                     puff.timer -= dt;
                 }
                 for (let i = smokeClouds.length - 1; i >= 0; i--) {
-                    if (smokeClouds[i].delay <= 0 && smokeClouds[i].timer <= 0) {
-                        smokeClouds.splice(i, 1);
-                    }
+                    if (smokeClouds[i].delay <= 0 && smokeClouds[i].timer <= 0) smokeClouds.splice(i, 1);
                 }
 
-                if (currentWeapon === 'pistol' && shootActive) {
+                // Pistol auto-fire (when joystick held)
+                if (currentWeapon === 'pistol' && shootActive && !daggerDashing) {
                     firePistol(now);
                 }
 
@@ -1106,9 +1177,7 @@
                     ctx.translate(shakeX, shakeY);
                 }
 
-                function toScreen(wx, wy) {
-                    return { x: wx + cameraOffsetX, y: wy + cameraOffsetY };
-                }
+                function toScreen(wx, wy) { return { x: wx + cameraOffsetX, y: wy + cameraOffsetY }; }
 
                 // Draw houses
                 for (const house of houses) {
@@ -1122,7 +1191,7 @@
                     }
                 }
 
-                // Draw smoke clouds (connected large puffs)
+                // Draw smoke clouds
                 for (const puff of smokeClouds) {
                     if (puff.delay > 0 || puff.timer <= 0) continue;
                     const s = toScreen(puff.worldX, puff.worldY);
@@ -1145,7 +1214,7 @@
                     ctx.strokeRect(s.x - 4, s.y - 4, 8, 8);
                 }
 
-                // Sniper fan & oscillation
+                // Sniper fan & oscillation (unchanged)
                 if (currentWeapon === 'sniper' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0) && !isReloading) {
                     const baseAngle = Math.atan2(shootVec.y, shootVec.x);
                     const fanLength = 1500;
@@ -1187,6 +1256,22 @@
                     ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1; ctx.restore();
                 }
 
+                // Dagger aim indicator (just show direction)
+                if (currentWeapon === 'dagger' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) {
+                    const pScreen = toScreen(player.worldX, player.worldY);
+                    const dashDist = daggerState.dashDistance;
+                    const endX = pScreen.x + shootVec.x * dashDist;
+                    const endY = pScreen.y + shootVec.y * dashDist;
+                    ctx.beginPath();
+                    ctx.moveTo(pScreen.x, pScreen.y);
+                    ctx.lineTo(endX, endY);
+                    ctx.strokeStyle = '#ff9999';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([4, 4]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+
                 // Skill aim preview
                 if (skillActive && (skillVec.x !== 0 || skillVec.y !== 0)) {
                     const targetScreen = toScreen(skillTargetWorld.x, skillTargetWorld.y);
@@ -1224,14 +1309,14 @@
                 ctx.textAlign = 'start';
 
                 // Floor items
-                [pistolOnFloor, shotgunOnFloor, sniperOnFloor].forEach(item => {
+                [pistolOnFloor, shotgunOnFloor, sniperOnFloor, daggerOnFloor].forEach(item => {
                     if (item.active) {
                         const s = toScreen(item.worldX, item.worldY);
                         ctx.beginPath(); ctx.arc(s.x, s.y, item.radius, 0, Math.PI*2);
                         ctx.fillStyle = '#ffc107'; ctx.fill();
                         ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
                         ctx.fillStyle = '#000'; ctx.font = '18px monospace'; ctx.textAlign = 'center';
-                        ctx.fillText(item.type === 'pistol' ? '🔫' : (item.type === 'shotgun' ? '🖖' : '🔭'), s.x, s.y+6);
+                        ctx.fillText(item.type === 'pistol' ? '🔫' : (item.type === 'shotgun' ? '🖖' : (item.type === 'sniper' ? '🔭' : '🗡️')), s.x, s.y+6);
                         ctx.textAlign = 'start';
                     }
                 });
@@ -1321,13 +1406,13 @@
                     ctx.beginPath(); ctx.arc(s.x, s.y, b.radius, 0, Math.PI*2); ctx.fill();
                 });
 
-                // Player with sniper rifle
+                // Player with weapon visual (sniper rifle or dagger)
                 const playerScreen = toScreen(player.worldX, player.worldY);
-                let rifleAngle = 0;
-                if (currentWeapon === 'sniper' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) {
-                    rifleAngle = Math.atan2(shootVec.y, shootVec.x);
+                let weaponAngle = 0;
+                if (shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) {
+                    weaponAngle = Math.atan2(shootVec.y, shootVec.x);
                 } else if (moveVec.x !== 0 || moveVec.y !== 0) {
-                    rifleAngle = Math.atan2(moveVec.y, moveVec.x);
+                    weaponAngle = Math.atan2(moveVec.y, moveVec.x);
                 }
                 ctx.beginPath(); ctx.arc(playerScreen.x, playerScreen.y, player.radius, 0, Math.PI*2);
                 ctx.fillStyle = dashActive ? '#e63946' : '#F4A261';
@@ -1338,8 +1423,8 @@
 
                 if (currentWeapon === 'sniper') {
                     const gunLength = 25;
-                    const gunEndX = playerScreen.x + Math.cos(rifleAngle) * gunLength;
-                    const gunEndY = playerScreen.y + Math.sin(rifleAngle) * gunLength;
+                    const gunEndX = playerScreen.x + Math.cos(weaponAngle) * gunLength;
+                    const gunEndY = playerScreen.y + Math.sin(weaponAngle) * gunLength;
                     ctx.beginPath();
                     ctx.moveTo(playerScreen.x, playerScreen.y);
                     ctx.lineTo(gunEndX, gunEndY);
@@ -1350,6 +1435,25 @@
                     ctx.arc(gunEndX, gunEndY, 4, 0, Math.PI*2);
                     ctx.fillStyle = '#333';
                     ctx.fill();
+                } else if (currentWeapon === 'dagger') {
+                    // Draw a small dagger blade extending from player
+                    const bladeLength = 14;
+                    const endX = playerScreen.x + Math.cos(weaponAngle) * bladeLength;
+                    const endY = playerScreen.y + Math.sin(weaponAngle) * bladeLength;
+                    ctx.beginPath();
+                    ctx.moveTo(playerScreen.x, playerScreen.y);
+                    ctx.lineTo(endX, endY);
+                    ctx.strokeStyle = '#C0C0C0';
+                    ctx.lineWidth = 4;
+                    ctx.stroke();
+                    // crossguard
+                    const perpX = -Math.sin(weaponAngle), perpY = Math.cos(weaponAngle);
+                    ctx.beginPath();
+                    ctx.moveTo(playerScreen.x + perpX*4, playerScreen.y + perpY*4);
+                    ctx.lineTo(playerScreen.x - perpX*4, playerScreen.y - perpY*4);
+                    ctx.strokeStyle = '#888';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
                 }
 
                 // Player health bar
@@ -1371,6 +1475,7 @@
                 const totalSpeed = Math.hypot(worldMoveVelX, worldMoveVelY);
                 let speedText = `Speed: ${Math.round(totalSpeed)} px/s`;
                 if (dashActive) speedText += ' (DASH!)';
+                if (daggerDashing) speedText += ' (LUNGE)';
                 if (Math.abs(recoilVelX) > 0.5 || Math.abs(recoilVelY) > 0.5) speedText += ' (recoil)';
                 ctx.font = 'bold 16px monospace'; ctx.fillStyle = 'white';
                 ctx.shadowColor = 'black'; ctx.shadowBlur = 4;
@@ -1378,9 +1483,14 @@
                 ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
 
                 if (currentWeapon) {
-                    const state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
-                    let ammoText = `${currentWeapon}: ${state.ammo}/${state.maxAmmo} | spares: ${state.spare}`;
-                    if (isReloading) ammoText += ' RELOADING...';
+                    let ammoText = '';
+                    if (currentWeapon === 'dagger') {
+                        ammoText = `Dagger (${daggerCooldown > 0 ? 'cooldown ' + Math.ceil(daggerCooldown) : 'ready'})`;
+                    } else {
+                        const state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
+                        ammoText = `${currentWeapon}: ${state.ammo}/${state.maxAmmo} | spares: ${state.spare}`;
+                        if (isReloading) ammoText += ' RELOADING...';
+                    }
                     ctx.font = 'bold 16px monospace'; ctx.fillStyle = '#ffc107';
                     ctx.shadowColor = 'black'; ctx.shadowBlur = 4;
                     ctx.textAlign = 'right';
