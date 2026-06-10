@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Infinite Plane | Grenade Throw, Multi‑Smoke & More</title>
+    <title>Infinite Plane | Random Smoke Puffs & More</title>
     <style>
         body {
             margin: 0;
@@ -278,8 +278,8 @@
             const playerBullets = [];
             const enemyBullets = [];
             const enemies = [];
-            const smokeClouds = [];   // small puff objects with individual timers
-            const grenades = [];      // traveling grenade blocks
+            const smokeClouds = [];
+            const grenades = [];
 
             // --- Houses (rectangles, L‑shapes) ---
             const houses = [];
@@ -720,10 +720,9 @@
                 skillCooldown = skillCooldownDuration;
             }
 
-            // Sniper skill: throw grenade block
+            // Sniper skill: throw grenade block that bursts into random puffs
             function executeSniperSkill() {
                 if (skillCooldown > 0) return;
-                // Launch a grenade block from player toward target
                 const angle = Math.atan2(skillTargetWorld.y - player.worldY, skillTargetWorld.x - player.worldX);
                 const speed = 500;
                 grenades.push({
@@ -805,11 +804,12 @@
             // --- Helper: check if line between two points passes through any smoke cloud ---
             function isLineInSmoke(x1, y1, x2, y2) {
                 for (const puff of smokeClouds) {
-                    if (puff.timer <= 0) continue;
+                    if (puff.delay > 0 || puff.timer <= 0) continue; // not active yet or faded
                     const cx = puff.worldX, cy = puff.worldY, r = puff.radius;
                     const dx = x2 - x1, dy = y2 - y1;
                     const fx = x1 - cx, fy = y1 - cy;
                     const a = dx*dx + dy*dy;
+                    if (a === 0) continue;
                     const b = 2*(fx*dx + fy*dy);
                     const c = fx*fx + fy*fy - r*r;
                     const discriminant = b*b - 4*a*c;
@@ -977,22 +977,23 @@
                     const g = grenades[i];
                     g.worldX += g.vx * dt;
                     g.worldY += g.vy * dt;
-                    // Check if reached target or close enough
                     const dist = Math.hypot(g.worldX - g.targetX, g.worldY - g.targetY);
                     if (dist < 20) {
-                        // Detonate: spawn multiple smoke puffs with staggered delays
-                        const count = 8;
-                        const baseRadius = 35;
-                        for (let j = 0; j < count; j++) {
-                            const angle = (j / count) * Math.PI * 2;
-                            const delay = j * 0.06; // seconds staggered
-                            const puffWorldX = g.targetX + Math.cos(angle) * (baseRadius * 0.8);
-                            const puffWorldY = g.targetY + Math.sin(angle) * (baseRadius * 0.8);
+                        // Burst into random smoke puffs covering a larger area
+                        const puffCount = 14;
+                        const maxRadius = 130; // spread area
+                        for (let j = 0; j < puffCount; j++) {
+                            const angle = Math.random() * Math.PI * 2;
+                            const offset = Math.random() * maxRadius;
+                            const puffWorldX = g.targetX + Math.cos(angle) * offset;
+                            const puffWorldY = g.targetY + Math.sin(angle) * offset;
+                            const puffRadius = 30 + Math.random() * 25; // variety
+                            const delay = Math.random() * 0.3; // staggered delays
                             smokeClouds.push({
                                 worldX: puffWorldX,
                                 worldY: puffWorldY,
-                                radius: baseRadius,
-                                timer: 2.5,        // shorter than old global smoke
+                                radius: puffRadius,
+                                timer: 3.0,        // slightly longer
                                 delay: delay
                             });
                         }
