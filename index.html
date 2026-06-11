@@ -116,7 +116,7 @@
                 isDead: false
             };
 
-            // --- Dash (movement ability) ---
+            // --- Dash ---
             const dashDuration = 0.2;
             const maxDashSpeed = 400;
             const dashDecayRate = 18;
@@ -138,57 +138,28 @@
             let isReloading = false, reloadTimer = 0;
             let lastFireTime = 0;
 
-            // Spray burst control
-            let sprayBurstBulletsLeft = 0;
-            let sprayBurstTimer = 0;
-            let sprayNextBurstTime = 0;
+            let sprayBurstBulletsLeft = 0, sprayBurstTimer = 0, sprayNextBurstTime = 0;
 
-            let skillCooldown = 0;
-            let skillCooldownDuration = 0;
+            let skillCooldown = 0, skillCooldownDuration = 0;
 
-            // Dagger basic dash
-            let daggerDashing = false;
-            let daggerDashTimer = 0;
-            let daggerDashDirection = { x: 0, y: 0 };
-            let daggerDashSpeed = 0;
-            let daggerCooldown = 0;
+            let daggerDashing = false, daggerDashTimer = 0;
+            let daggerDashDirection = { x: 0, y: 0 }, daggerDashSpeed = 0, daggerCooldown = 0;
 
-            // Dagger skill
-            let daggerSkillDashActive = false;
-            let daggerSkillDashTimer = 0;
-            let daggerSkillDashDuration = 0.35;
-            let daggerSkillDashDistance = 380;
-            let daggerSkillDashSpeed = 0;
-            let daggerSkillDashDirection = { x: 0, y: 0 };
-            let daggerSkillExplosionQueue = [];
-            let daggerSkillExplosions = [];
-            let daggerSkillIndicators = [];
+            let daggerSkillDashActive = false, daggerSkillDashTimer = 0;
+            let daggerSkillDashDuration = 0.35, daggerSkillDashDistance = 380;
+            let daggerSkillDashDirection = { x: 0, y: 0 }, daggerSkillDashSpeed = 0;
+            let daggerSkillExplosionQueue = [], daggerSkillExplosions = [], daggerSkillIndicators = [];
 
-            // Spray skill
-            let spraySkillActive = false;
-            let spraySkillDashBackward = false;
-            let spraySkillDashTimer = 0;
-            let spraySkillDashDuration = 0.25;
-            let spraySkillDashDistance = 120;
-            let spraySkillBulletCount = 40;
-            let spraySkillSpread = 1.2;
-            let spraySkillBulletsLeft = 0;
-            let spraySkillFireRate = 0.03;
-            let spraySkillNextFireTime = 0;
-            let spraySkillAimDirX = 0, spraySkillAimDirY = 0;
+            let spraySkillActive = false, spraySkillDashBackward = false, spraySkillDashTimer = 0;
+            let spraySkillDashDuration = 0.25, spraySkillDashDistance = 120, spraySkillBulletCount = 40;
+            let spraySkillSpread = 1.2, spraySkillBulletsLeft = 0, spraySkillFireRate = 0.03;
+            let spraySkillNextFireTime = 0, spraySkillAimDirX = 0, spraySkillAimDirY = 0;
 
-            // --- Recoil ---
             let recoilVelX = 0, recoilVelY = 0;
-
-            // --- Floor items (drops) ---
             let floorItems = [];
 
-            // --- Bullets, enemies, smoke clouds, grenades ---
-            const playerBullets = [];
-            const enemyBullets = [];
-            const enemies = [];
-            const smokeClouds = [];
-            const grenades = [];
+            const playerBullets = [], enemyBullets = [], enemies = [];
+            const smokeClouds = [], grenades = [];
 
             // --- Houses ---
             const houses = [];
@@ -209,8 +180,7 @@
                     if (shape === 'single') {
                         rects.push({ x: x - baseW/2, y: y - baseH/2, w: baseW, h: baseH });
                     } else {
-                        const secondW = 40 + Math.random() * 30;
-                        const secondH = 40 + Math.random() * 30;
+                        const secondW = 40 + Math.random() * 30, secondH = 40 + Math.random() * 30;
                         rects.push({ x: x - baseW/2, y: y - baseH/2, w: baseW, h: baseH });
                         const side = Math.floor(Math.random() * 4);
                         if (side === 0) rects.push({ x: x - secondW/2, y: y - baseH/2 - secondH, w: secondW, h: secondH });
@@ -223,33 +193,25 @@
             }
             generateHouses();
 
-            // --- Sniper accuracy ---
             let sniperSpread = 0.3;
             const SNIPER_MAX_SPREAD = 0.3, SNIPER_MIN_SPREAD = 0.0, SNIPER_SPREAD_RECOVERY = 0.3;
             let sniperAimAngle = 0;
             const SNIPER_OSCILLATION_SPEED = 2.5;
+            let screenShake = 0, shakeDuration = 0, skillFlashAlpha = 0;
 
-            // --- Effects ---
-            let screenShake = 0, shakeDuration = 0;
-            let skillFlashAlpha = 0;
-
-            // --- Auto-spawn ---
             let spawnTimer = 0;
             const SPAWN_INTERVAL = 4.0;
             const ENEMY_TYPES = ['pistol', 'sword', 'spray', 'gang', 'shotgun', 'sniper'];
 
-            // ========== Joystick states ==========
+            // ========== Joystick helpers ==========
             let movePointerId = null, moveBaseCenter = { x:0, y:0 }, moveMaxDist = 0;
             let moveVec = { x:0, y:0 };
             let shootPointerId = null, shootBaseCenter = { x:0, y:0 }, shootMaxDist = 0;
-            let shootVec = { x:0, y:0 };
-            let shootActive = false;
+            let shootVec = { x:0, y:0 }, shootActive = false;
             let skillPointerId = null, skillBaseCenter = { x:0, y:0 }, skillMaxDist = 0;
-            let skillVec = { x:0, y:0 };
-            let skillActive = false;
+            let skillVec = { x:0, y:0 }, skillActive = false;
             let skillTargetWorld = { x:0, y:0 };
 
-            // ========== Joystick helpers ==========
             function updateMoveBase() {
                 const rect = moveBaseEl.getBoundingClientRect();
                 moveBaseCenter.x = rect.left + rect.width/2;
@@ -323,7 +285,7 @@
             updateMoveBase(); updateShootBase(); updateSkillBase();
             window.addEventListener('resize', () => { updateMoveBase(); updateShootBase(); updateSkillBase(); });
 
-            // ========== Movement joystick events ==========
+            // ========== Joystick events ==========
             moveBaseEl.addEventListener('pointerdown', (e) => {
                 if (e.target === moveBaseEl && movePointerId === null && !player.isDead) {
                     e.preventDefault();
@@ -344,7 +306,6 @@
             window.addEventListener('pointermove', (e) => { if (movePointerId === e.pointerId) moveMoveThumb(e.clientX, e.clientY); });
             window.addEventListener('pointerup', (e) => { if (movePointerId === e.pointerId) resetMoveThumb(); });
 
-            // ========== Shooting & Skill joystick events ==========
             shootBaseEl.addEventListener('pointerdown', (e) => {
                 if (e.target === shootBaseEl && shootPointerId === null && currentWeapon && !player.isDead) {
                     e.preventDefault();
@@ -466,9 +427,7 @@
                 const iconMap = { pistol: '🔫', shotgun: '🖖', sniper: '🔭', dagger: '🗡️', spray: '💥' };
                 inventory[slot] = { name: item.type, icon: iconMap[item.type] };
                 item.active = false;
-                if (currentWeapon !== item.type) {
-                    equipWeapon(item.type);
-                }
+                if (currentWeapon !== item.type) equipWeapon(item.type);
                 shootBaseEl.style.display = 'block';
                 shootThumbEl.style.display = 'block';
                 updateShootBase();
@@ -524,15 +483,11 @@
             function startReload() {
                 if (isReloading || currentWeapon === 'dagger') return;
                 let state;
-                if (currentWeapon === 'spray') {
-                    state = sprayState;
-                    if (state.ammo >= state.maxAmmo || state.spare <= 0) return;
-                } else {
-                    state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
-                    if (state.ammo >= state.maxAmmo || state.spare <= 0) return;
-                }
+                if (currentWeapon === 'spray') state = sprayState;
+                else state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
+                if (state.ammo >= state.maxAmmo || state.spare <= 0) return;
                 isReloading = true;
-                reloadTimer = (currentWeapon === 'spray') ? sprayState.reloadTime : state.reloadTime;
+                reloadTimer = state.reloadTime;
             }
             function finishReload() {
                 if (currentWeapon === 'spray') {
@@ -616,7 +571,7 @@
                 skillFlashAlpha = 0.5;
             }
 
-            // ========== Firing functions ==========
+            // ========== Firing ==========
             function firePistol(now) {
                 const state = pistolState;
                 if (isReloading || state.ammo <= 0 || player.isDead) { if (state.ammo === 0) startReload(); return false; }
@@ -666,7 +621,6 @@
                 if (state.ammo === 0) startReload();
             }
 
-            // Shotgun skill
             function executeShotgunSkill() {
                 if (skillCooldown > 0 || player.isDead) return;
                 player.worldX = skillTargetWorld.x;
@@ -683,7 +637,6 @@
                 skillCooldown = skillCooldownDuration;
             }
 
-            // Sniper skill: smoke grenade
             function executeSniperSkill() {
                 if (skillCooldown > 0 || player.isDead) return;
                 const angle = Math.atan2(skillTargetWorld.y - player.worldY, skillTargetWorld.x - player.worldX);
@@ -1022,18 +975,6 @@
 
                 if (player.isDead) {
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    ctx.save();
-                    function toScreen(wx, wy) { return { x: wx + cameraOffsetX, y: wy + cameraOffsetY }; }
-                    for (const house of houses) {
-                        for (const rect of house) {
-                            const s = toScreen(rect.x, rect.y);
-                            ctx.fillStyle = '#8B5A2B';
-                            ctx.fillRect(s.x, s.y, rect.w, rect.h);
-                            ctx.strokeStyle = '#5C4033'; ctx.lineWidth = 2;
-                            ctx.strokeRect(s.x, s.y, rect.w, rect.h);
-                        }
-                    }
-                    ctx.restore();
                     requestAnimationFrame(gameLoop);
                     return;
                 }
@@ -1073,7 +1014,7 @@
                     sniperAimAngle = Math.sin(now * 0.001 * SNIPER_OSCILLATION_SPEED) * (sniperSpread / 2);
                 }
 
-                // --- Dagger basic dash update ---
+                // Dagger basic dash
                 if (daggerDashing) {
                     daggerDashTimer -= dt;
                     if (daggerDashTimer <= 0) {
@@ -1096,14 +1037,13 @@
                     }
                 }
 
-                // --- Dagger long dash skill update ---
+                // Dagger long dash skill
                 if (daggerSkillDashActive) {
                     daggerSkillDashTimer -= dt;
                     if (daggerSkillDashTimer <= 0) {
                         daggerSkillDashActive = false;
                         daggerSkillDashTimer = 0;
-                        const dirX = daggerSkillDashDirection.x;
-                        const dirY = daggerSkillDashDirection.y;
+                        const dirX = daggerSkillDashDirection.x, dirY = daggerSkillDashDirection.y;
                         const startDashX = player.worldX - dirX * daggerSkillDashDistance;
                         const startDashY = player.worldY - dirY * daggerSkillDashDistance;
                         const segmentDist = daggerSkillDashDistance / 4;
@@ -1116,8 +1056,8 @@
                             daggerSkillExplosionQueue.push({ worldX, worldY, delay, indicatorCreated: false });
                         }
                     } else {
-                        const moveX = daggerSkillDashDirection.x * daggerDashSpeed * dt;
-                        const moveY = daggerSkillDashDirection.y * daggerDashSpeed * dt;
+                        const moveX = daggerSkillDashDirection.x * daggerSkillDashSpeed * dt;
+                        const moveY = daggerSkillDashDirection.y * daggerSkillDashSpeed * dt;
                         player.worldX += moveX;
                         player.worldY += moveY;
                         resolveHouseCollisions(player);
@@ -1133,7 +1073,7 @@
                         daggerSkillIndicators.push({ worldX: exp.worldX, worldY: exp.worldY, timer: exp.delay + 0.3 });
                     }
                     if (exp.delay <= 0) {
-                        daggerSkillExplosions.push({ worldX: exp.worldX, worldY: exp.worldY, radius: 10, maxRadius: 70, timer: 0.4, damage: 30 });
+                        daggerSkillExplosions.push({ worldX: exp.worldX, worldY: exp.worldY, radius: 10, maxRadius: 70, timer: 0.4 });
                         for (let j = enemies.length - 1; j >= 0; j--) {
                             const e = enemies[j];
                             if (Math.hypot(exp.worldX - e.worldX, exp.worldY - e.worldY) < 70 + e.radius) {
@@ -1145,21 +1085,17 @@
                         daggerSkillExplosionQueue.splice(i, 1);
                     }
                 }
-
-                // Update indicators & explosions
                 for (let i = daggerSkillIndicators.length - 1; i >= 0; i--) {
-                    const ind = daggerSkillIndicators[i];
-                    ind.timer -= dt;
-                    if (ind.timer <= 0) daggerSkillIndicators.splice(i, 1);
+                    daggerSkillIndicators[i].timer -= dt;
+                    if (daggerSkillIndicators[i].timer <= 0) daggerSkillIndicators.splice(i, 1);
                 }
                 for (let i = daggerSkillExplosions.length - 1; i >= 0; i--) {
-                    const exp = daggerSkillExplosions[i];
-                    exp.timer -= dt;
-                    if (exp.timer <= 0) { daggerSkillExplosions.splice(i, 1); }
-                    else { const progress = 1 - (exp.timer / 0.4); exp.radius = 10 + (exp.maxRadius - 10) * progress; }
+                    daggerSkillExplosions[i].timer -= dt;
+                    if (daggerSkillExplosions[i].timer <= 0) daggerSkillExplosions.splice(i, 1);
+                    else { const p = 1 - (daggerSkillExplosions[i].timer / 0.4); daggerSkillExplosions[i].radius = 10 + 60 * p; }
                 }
 
-                // --- Spray skill update ---
+                // Spray skill update
                 if (spraySkillActive) {
                     if (spraySkillDashBackward) {
                         spraySkillDashTimer -= dt;
@@ -1214,8 +1150,7 @@
                 // Grenades (smoke)
                 for (let i = grenades.length - 1; i >= 0; i--) {
                     const g = grenades[i];
-                    g.worldX += g.vx * dt;
-                    g.worldY += g.vy * dt;
+                    g.worldX += g.vx * dt; g.worldY += g.vy * dt;
                     const toTargetX = g.targetX - g.worldX, toTargetY = g.targetY - g.worldY;
                     const dist = Math.hypot(toTargetX, toTargetY);
                     const moveX = g.vx, moveY = g.vy;
@@ -1234,7 +1169,6 @@
                         grenades.splice(i, 1);
                     }
                 }
-
                 for (const puff of smokeClouds) {
                     if (puff.delay > 0) { puff.delay -= dt; continue; }
                     puff.timer -= dt;
@@ -1670,7 +1604,6 @@
                 requestAnimationFrame(gameLoop);
             }
 
-            // Restart
             restartButton.addEventListener('click', () => {
                 player.worldX = canvas.width / 2;
                 player.worldY = canvas.height / 2;
