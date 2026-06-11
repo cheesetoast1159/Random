@@ -583,15 +583,15 @@
                 skillFlashAlpha = 0.5;
             }
 
-            // ========== Firing ==========
-            function firePistol(now) {
+            // ========== Firing (pistol aim assist added) ==========
+            function firePistol(now, dirX, dirY) {
                 const state = pistolState;
                 if (isReloading || state.ammo <= 0 || player.isDead) { if (state.ammo === 0) startReload(); return false; }
                 if (now - lastFireTime < state.fireRate * 1000) return false;
-                if (shootVec.x === 0 && shootVec.y === 0) return false;
-                const mag = Math.hypot(shootVec.x, shootVec.y);
-                const vx = (shootVec.x / mag) * state.bulletSpeed;
-                const vy = (shootVec.y / mag) * state.bulletSpeed;
+                if (dirX === 0 && dirY === 0) return false;
+                const mag = Math.hypot(dirX, dirY);
+                const vx = (dirX / mag) * state.bulletSpeed;
+                const vy = (dirY / mag) * state.bulletSpeed;
                 playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx, vy, radius: 5, damage: state.damage, isBeam: false, sourceWeapon: 'pistol' });
                 state.ammo--;
                 lastFireTime = now;
@@ -1227,9 +1227,37 @@
                     sprayNextBurstTime = now + state.burstCooldown * 1000;
                 }
 
-                // Pistol auto-fire
+                // Pistol auto-fire with aim assist
                 if (currentWeapon === 'pistol' && shootActive && !daggerDashing && !daggerSkillDashActive && !spraySkillDashBackward) {
-                    firePistol(now);
+                    let aimDirX = shootVec.x, aimDirY = shootVec.y;
+                    if (aimDirX !== 0 || aimDirY !== 0) {
+                        const rawAngle = Math.atan2(aimDirY, aimDirX);
+                        let bestEnemy = null;
+                        let bestAngleDiff = Infinity;
+                        const aimAssistAngle = Math.PI / 12; // 15 degrees
+                        const aimAssistRange = 350;
+                        for (const enemy of enemies) {
+                            const dx = enemy.worldX - player.worldX;
+                            const dy = enemy.worldY - player.worldY;
+                            const dist = Math.hypot(dx, dy);
+                            if (dist > aimAssistRange) continue;
+                            const angleToEnemy = Math.atan2(dy, dx);
+                            let angleDiff = Math.abs(angleToEnemy - rawAngle);
+                            if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+                            if (angleDiff < aimAssistAngle && angleDiff < bestAngleDiff) {
+                                bestAngleDiff = angleDiff;
+                                bestEnemy = enemy;
+                            }
+                        }
+                        if (bestEnemy) {
+                            aimDirX = bestEnemy.worldX - player.worldX;
+                            aimDirY = bestEnemy.worldY - player.worldY;
+                            const mag = Math.hypot(aimDirX, aimDirY);
+                            aimDirX /= mag;
+                            aimDirY /= mag;
+                        }
+                    }
+                    firePistol(now, aimDirX, aimDirY);
                 }
 
                 updateEnemies(now, dt);
@@ -1661,7 +1689,6 @@
                 shootThumbEl.style.display = 'none';
                 skillBaseEl.style.display = 'none';
                 skillThumbEl.style.display = 'none';
-                // Respawn pistol on the floor at player's location
                 floorItems.push({
                     worldX: player.worldX,
                     worldY: player.worldY,
@@ -1674,7 +1701,6 @@
                 deathScreen.style.display = 'none';
             });
 
-            // Initial state: no weapon, joysticks hidden
             shootBaseEl.style.display = 'none';
             shootThumbEl.style.display = 'none';
             skillBaseEl.style.display = 'none';
