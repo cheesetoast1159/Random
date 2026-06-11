@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Infinite Plane | Auto Swarms & Drops</title>
+    <title>Infinite Plane | Dash Buff, Floor Pistol & Attack Ranges</title>
     <style>
         body {
             margin: 0; overflow: hidden; background: #1a1a1a; touch-action: none; font-family: sans-serif;
@@ -116,9 +116,9 @@
                 isDead: false
             };
 
-            // --- Dash ---
-            const dashDuration = 0.2;
-            const maxDashSpeed = 400;
+            // --- Dash (movement ability) – now very fast and grants invulnerability ---
+            const dashDuration = 0.25;           // slightly longer
+            const maxDashSpeed = 1200;           // massively increased
             const dashDecayRate = 18;
             const dashCooldown = 1.0;
             let dashActive = false, dashTimer = 0;
@@ -127,7 +127,7 @@
 
             // --- Inventory & Weapons ---
             const inventory = [null, null, null, null];
-            let currentWeapon = 'pistol';
+            let currentWeapon = null;            // no weapon initially
 
             const pistolState = { ammo: 12, maxAmmo: 12, spare: 20, reloadTime: 1.2, fireRate: 0.45, bulletSpeed: 600, damage: 10 };
             const shotgunState = { ammo: 8, maxAmmo: 8, spare: 20, reloadTime: 1.8, pellets: 8, spreadAngle: Math.PI / 9, bulletSpeed: 500, damage: 8, recoilForce: 400 };
@@ -156,7 +156,17 @@
             let spraySkillNextFireTime = 0, spraySkillAimDirX = 0, spraySkillAimDirY = 0;
 
             let recoilVelX = 0, recoilVelY = 0;
+
+            // --- Floor items (drops + initial pistol) ---
             let floorItems = [];
+            // Spawn a pistol on the floor where the player starts
+            floorItems.push({
+                worldX: player.worldX,
+                worldY: player.worldY,
+                radius: 15,
+                active: true,
+                type: 'pistol'
+            });
 
             const playerBullets = [], enemyBullets = [], enemies = [];
             const smokeClouds = [], grenades = [];
@@ -389,7 +399,7 @@
                 }
             });
 
-            // ========== Dash ==========
+            // ========== Dash (movement ability) ==========
             function updateDashUI() {
                 if (cooldownTimer > 0) { dashButton.textContent = 'COOLING...'; dashButton.classList.add('disabled'); }
                 else if (dashActive) { dashButton.textContent = 'DASHING!'; dashButton.classList.add('disabled'); }
@@ -679,8 +689,8 @@
                 if (type === 'pistol') {
                     enemy = {
                         type: 'pistol', worldX, worldY, radius: 18, health: 40, speed: 120,
-                        fireRate: 0.6, lastFire: performance.now(), damage: pistolState.damage, visionRange: 400,
-                        drop: 'pistol'
+                        fireRate: 0.6, lastFire: performance.now(), damage: pistolState.damage,
+                        visionRange: 400, drop: 'pistol'
                     };
                 } else if (type === 'sword') {
                     enemy = {
@@ -696,8 +706,8 @@
                         burstCooldown: 0.7, lastBurstTime: 0, burstCount: 3, burstFireRate: 0.07,
                         burstBulletSpeed: 550, burstDamage: 4, dashAfterBurst: false, dashSpeed: 300, dashCooldown: 0,
                         panicThreshold: 15, panicActive: false, panicMagRemaining: 30, panicFireRate: 0.04,
-                        panicSpread: 0.6, panicTriggerDist: 200, normalDist: 250, visionRange: 500,
-                        drop: 'spray'
+                        panicSpread: 0.6, panicTriggerDist: 200, normalDist: 250,
+                        visionRange: 500, drop: 'spray'
                     };
                 } else if (type === 'gang') {
                     enemy = {
@@ -710,14 +720,16 @@
                         type: 'shotgun', worldX, worldY, radius: 16, health: 50, speed: 140,
                         fireCooldown: 0.9, lastFire: 0,
                         bulletSpeed: 500, damage: 6, pellets: 5, spreadAngle: 0.3,
-                        preferredDist: 150, drop: 'shotgun'
+                        preferredDist: 150,
+                        visionRange: 400, drop: 'shotgun'
                     };
                 } else if (type === 'sniper') {
                     enemy = {
                         type: 'sniper', worldX, worldY, radius: 16, health: 30, speed: 100,
                         fireCooldown: 1.2, lastFire: 0,
                         bulletSpeed: 800, damage: 25,
-                        preferredDist: 350, drop: 'sniper'
+                        preferredDist: 350,
+                        visionRange: 600, drop: 'sniper'
                     };
                 }
                 enemies.push(enemy);
@@ -748,10 +760,12 @@
                 return false;
             }
 
-            // ========== Enemy AI ==========
+            // ========== Enemy AI (invulnerability + range check) ==========
             function updateEnemies(now, dt) {
                 const gangMembers = enemies.filter(e => e.type === 'gang');
                 const gangAllAlive = gangMembers.length === 3;
+                // Player is invulnerable during any dash
+                const playerInvul = dashActive || daggerDashing || daggerSkillDashActive || spraySkillDashBackward;
                 for (const enemy of enemies) {
                     const dx = player.worldX - enemy.worldX;
                     const dy = player.worldY - enemy.worldY;
@@ -767,6 +781,7 @@
                                 enemy.worldY += Math.sin(angle) * enemy.speed * dt;
                             }
                             resolveHouseCollisions(enemy);
+                            // Only fire if within vision range
                             if (dist < enemy.visionRange && now - enemy.lastFire > enemy.fireRate * 1000) {
                                 const a = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
                                 enemyBullets.push({
@@ -815,8 +830,8 @@
                         }
                         if (enemy.dodgeCooldown > 0) enemy.dodgeCooldown -= dt;
                         resolveHouseCollisions(enemy);
-                        if (canSeePlayer && dist < player.radius + enemy.radius && !player.isDead && 
-                            !(daggerDashing || daggerSkillDashActive) && 
+                        // Melee only if not invulnerable
+                        if (!playerInvul && canSeePlayer && dist < player.radius + enemy.radius && !player.isDead && 
                             now - (enemy.lastMelee || 0) > enemy.meleeCooldown * 1000) {
                             player.health -= enemy.meleeDamage;
                             enemy.lastMelee = now;
@@ -867,7 +882,8 @@
                                         enemy.worldY += Math.sin(angle) * enemy.speed * dt;
                                     }
                                     resolveHouseCollisions(enemy);
-                                    if (now - (enemy.lastBurstTime || 0) > enemy.burstCooldown * 1000) {
+                                    // Normal burst only within vision range
+                                    if (dist < enemy.visionRange && now - (enemy.lastBurstTime || 0) > enemy.burstCooldown * 1000) {
                                         enemy.burstTimer = enemy.burstCount;
                                         enemy.burstBulletsLeft = enemy.burstCount;
                                         enemy.lastBurstTime = now;
@@ -895,8 +911,7 @@
                                 enemy.worldY += Math.sin(angle) * enemy.speed * dt;
                             }
                             resolveHouseCollisions(enemy);
-                            if (dist < player.radius + enemy.radius && !player.isDead &&
-                                !(daggerDashing || daggerSkillDashActive) &&
+                            if (!playerInvul && dist < player.radius + enemy.radius && !player.isDead &&
                                 now - (enemy.lastMelee || 0) > enemy.meleeCooldown * 1000) {
                                 const damage = gangAllAlive ? enemy.meleeDamage * 2 : enemy.meleeDamage;
                                 player.health -= damage;
@@ -924,7 +939,8 @@
                                 enemy.worldY += Math.sin(angle) * enemy.speed * dt;
                             }
                             resolveHouseCollisions(enemy);
-                            if (now - (enemy.lastFire || 0) > enemy.fireCooldown * 1000) {
+                            // Fire only if within vision range
+                            if (dist < enemy.visionRange && now - (enemy.lastFire || 0) > enemy.fireCooldown * 1000) {
                                 const a = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
                                 for (let i = 0; i < enemy.pellets; i++) {
                                     const angle = a + (Math.random()*2-1) * enemy.spreadAngle;
@@ -951,7 +967,8 @@
                                 enemy.worldY += Math.sin(angle) * enemy.speed * dt;
                             }
                             resolveHouseCollisions(enemy);
-                            if (now - (enemy.lastFire || 0) > enemy.fireCooldown * 1000) {
+                            // Fire only if within vision range
+                            if (dist < enemy.visionRange && now - (enemy.lastFire || 0) > enemy.fireCooldown * 1000) {
                                 const a = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
                                 enemyBullets.push({
                                     worldX: enemy.worldX, worldY: enemy.worldY,
@@ -1247,23 +1264,41 @@
                     if (hit) { playerBullets.splice(i, 1); continue; }
                 }
 
-                // Enemy bullets vs player
-                for (let i = enemyBullets.length - 1; i >= 0; i--) {
-                    const b = enemyBullets[i];
-                    b.worldX += b.vx * dt; b.worldY += b.vy * dt;
-                    let remove = false;
-                    for (const house of houses) {
-                        for (const rect of house) {
-                            if (b.worldX > rect.x - b.radius && b.worldX < rect.x + rect.w + b.radius &&
-                                b.worldY > rect.y - b.radius && b.worldY < rect.y + rect.h + b.radius) { remove = true; break; }
+                // Enemy bullets vs player (invulnerable check)
+                const playerInvul = dashActive || daggerDashing || daggerSkillDashActive || spraySkillDashBackward;
+                if (!playerInvul) {
+                    for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                        const b = enemyBullets[i];
+                        b.worldX += b.vx * dt; b.worldY += b.vy * dt;
+                        let remove = false;
+                        for (const house of houses) {
+                            for (const rect of house) {
+                                if (b.worldX > rect.x - b.radius && b.worldX < rect.x + rect.w + b.radius &&
+                                    b.worldY > rect.y - b.radius && b.worldY < rect.y + rect.h + b.radius) { remove = true; break; }
+                            }
+                            if (remove) break;
                         }
-                        if (remove) break;
+                        if (remove) { enemyBullets.splice(i, 1); continue; }
+                        if (Math.hypot(b.worldX - player.worldX, b.worldY - player.worldY) < player.radius + b.radius) {
+                            player.health -= b.damage;
+                            enemyBullets.splice(i, 1);
+                            if (player.health <= 0) { player.health = 0; player.isDead = true; deathScreen.style.display = 'flex'; }
+                        }
                     }
-                    if (remove) { enemyBullets.splice(i, 1); continue; }
-                    if (Math.hypot(b.worldX - player.worldX, b.worldY - player.worldY) < player.radius + b.radius) {
-                        player.health -= b.damage;
-                        enemyBullets.splice(i, 1);
-                        if (player.health <= 0) { player.health = 0; player.isDead = true; deathScreen.style.display = 'flex'; }
+                } else {
+                    // Still remove bullets that hit houses or go off-screen, but don't damage player
+                    for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                        const b = enemyBullets[i];
+                        b.worldX += b.vx * dt; b.worldY += b.vy * dt;
+                        let remove = false;
+                        for (const house of houses) {
+                            for (const rect of house) {
+                                if (b.worldX > rect.x - b.radius && b.worldX < rect.x + rect.w + b.radius &&
+                                    b.worldY > rect.y - b.radius && b.worldY < rect.y + rect.h + b.radius) { remove = true; break; }
+                            }
+                            if (remove) break;
+                        }
+                        if (remove) enemyBullets.splice(i, 1);
                     }
                 }
 
@@ -1445,7 +1480,6 @@
                     else if (enemy.type === 'shotgun') { ctx.fillStyle = '#e91e63'; ctx.strokeStyle = '#880e4f'; }
                     else if (enemy.type === 'sniper') { ctx.fillStyle = '#9c27b0'; ctx.strokeStyle = '#4a148c'; }
                     ctx.fill(); ctx.lineWidth = 2; ctx.stroke();
-                    // Sword visual
                     if (enemy.type === 'sword') {
                         const angleToPlayer = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
                         const swordLength = enemy.radius + 6;
@@ -1464,7 +1498,6 @@
                             ctx.restore();
                         }
                     }
-                    // Health bar
                     const eBarW = enemy.radius*2, eBarH = 4;
                     const maxHp = enemy.type === 'pistol' ? 40 : (enemy.type === 'sword' ? 60 : (enemy.type === 'spray' ? 50 : (enemy.type === 'gang' ? 20 : (enemy.type === 'shotgun' ? 50 : 30))));
                     const eHpPct = enemy.health / maxHp;
@@ -1504,7 +1537,8 @@
                 if (shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) weaponAngle = Math.atan2(shootVec.y, shootVec.x);
                 else if (moveVec.x !== 0 || moveVec.y !== 0) weaponAngle = Math.atan2(moveVec.y, moveVec.x);
                 ctx.beginPath(); ctx.arc(playerScreen.x, playerScreen.y, player.radius, 0, Math.PI*2);
-                ctx.fillStyle = dashActive ? '#e63946' : '#F4A261'; ctx.fill();
+                ctx.fillStyle = dashActive ? '#e63946' : (playerInvul ? '#aaa' : '#F4A261');
+                ctx.fill();
                 ctx.strokeStyle = dashActive ? '#fff' : '#E76F51'; ctx.lineWidth = 3; ctx.stroke();
                 if (currentWeapon === 'sniper') {
                     const gunLength = 25;
@@ -1535,7 +1569,6 @@
                     ctx.fillRect(endX - 4, endY - 4, 8, 8);
                 }
 
-                // Player health bar
                 const pBarW = player.radius*2, pBarH = 5;
                 const pHpPct = player.health / player.maxHealth;
                 ctx.fillStyle = '#333';
@@ -1626,12 +1659,27 @@
                 spraySkillDashBackward = false;
                 spraySkillBulletsLeft = 0;
                 floorItems.length = 0;
-                currentWeapon = 'pistol';
-                equipWeapon('pistol');
+                currentWeapon = null;
+                shootBaseEl.style.display = 'none';
+                shootThumbEl.style.display = 'none';
+                skillBaseEl.style.display = 'none';
+                skillThumbEl.style.display = 'none';
+                // Respawn pistol on the floor at player's location
+                floorItems.push({
+                    worldX: player.worldX,
+                    worldY: player.worldY,
+                    radius: 15,
+                    active: true,
+                    type: 'pistol'
+                });
                 deathScreen.style.display = 'none';
             });
 
-            equipWeapon('pistol');
+            // Initial state: no weapon, joysticks hidden
+            shootBaseEl.style.display = 'none';
+            shootThumbEl.style.display = 'none';
+            skillBaseEl.style.display = 'none';
+            skillThumbEl.style.display = 'none';
             updateDashUI();
             requestAnimationFrame(gameLoop);
         })();
