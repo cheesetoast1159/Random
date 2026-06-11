@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Infinite Plane | Dash Buff, Floor Pistol & Attack Ranges</title>
+    <title>Infinite Plane | Gentle First Wave, Dash Buff & More</title>
     <style>
         body {
             margin: 0; overflow: hidden; background: #1a1a1a; touch-action: none; font-family: sans-serif;
@@ -116,9 +116,9 @@
                 isDead: false
             };
 
-            // --- Dash (movement ability) – now very fast and grants invulnerability ---
-            const dashDuration = 0.25;           // slightly longer
-            const maxDashSpeed = 1200;           // massively increased
+            // --- Dash (movement ability) – buffed speed + invulnerability ---
+            const dashDuration = 0.25;
+            const maxDashSpeed = 1200;           // much faster
             const dashDecayRate = 18;
             const dashCooldown = 1.0;
             let dashActive = false, dashTimer = 0;
@@ -209,8 +209,10 @@
             const SNIPER_OSCILLATION_SPEED = 2.5;
             let screenShake = 0, shakeDuration = 0, skillFlashAlpha = 0;
 
+            // --- Spawn control (gentle first wave) ---
             let spawnTimer = 0;
-            const SPAWN_INTERVAL = 4.0;
+            const SPAWN_INTERVAL = 4.0;          // seconds between waves
+            let waveNumber = 0;                  // increases after each wave
             const ENEMY_TYPES = ['pistol', 'sword', 'spray', 'gang', 'shotgun', 'sniper'];
 
             // ========== Joystick helpers ==========
@@ -661,9 +663,11 @@
                 skillCooldown = skillCooldownDuration;
             }
 
-            // ========== Enemy spawning ==========
+            // ========== Enemy spawning (scaling waves) ==========
             function spawnWave() {
-                const count = 2 + Math.floor(Math.random() * 3);
+                waveNumber++;
+                // First wave = 1, then +1 every 2 waves, max 6
+                const count = Math.min(1 + Math.floor((waveNumber - 1) / 2), 6);
                 for (let i = 0; i < count; i++) {
                     const type = ENEMY_TYPES[Math.floor(Math.random() * ENEMY_TYPES.length)];
                     const angle = Math.random() * Math.PI * 2;
@@ -764,7 +768,6 @@
             function updateEnemies(now, dt) {
                 const gangMembers = enemies.filter(e => e.type === 'gang');
                 const gangAllAlive = gangMembers.length === 3;
-                // Player is invulnerable during any dash
                 const playerInvul = dashActive || daggerDashing || daggerSkillDashActive || spraySkillDashBackward;
                 for (const enemy of enemies) {
                     const dx = player.worldX - enemy.worldX;
@@ -781,7 +784,6 @@
                                 enemy.worldY += Math.sin(angle) * enemy.speed * dt;
                             }
                             resolveHouseCollisions(enemy);
-                            // Only fire if within vision range
                             if (dist < enemy.visionRange && now - enemy.lastFire > enemy.fireRate * 1000) {
                                 const a = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
                                 enemyBullets.push({
@@ -830,7 +832,6 @@
                         }
                         if (enemy.dodgeCooldown > 0) enemy.dodgeCooldown -= dt;
                         resolveHouseCollisions(enemy);
-                        // Melee only if not invulnerable
                         if (!playerInvul && canSeePlayer && dist < player.radius + enemy.radius && !player.isDead && 
                             now - (enemy.lastMelee || 0) > enemy.meleeCooldown * 1000) {
                             player.health -= enemy.meleeDamage;
@@ -882,7 +883,6 @@
                                         enemy.worldY += Math.sin(angle) * enemy.speed * dt;
                                     }
                                     resolveHouseCollisions(enemy);
-                                    // Normal burst only within vision range
                                     if (dist < enemy.visionRange && now - (enemy.lastBurstTime || 0) > enemy.burstCooldown * 1000) {
                                         enemy.burstTimer = enemy.burstCount;
                                         enemy.burstBulletsLeft = enemy.burstCount;
@@ -939,7 +939,6 @@
                                 enemy.worldY += Math.sin(angle) * enemy.speed * dt;
                             }
                             resolveHouseCollisions(enemy);
-                            // Fire only if within vision range
                             if (dist < enemy.visionRange && now - (enemy.lastFire || 0) > enemy.fireCooldown * 1000) {
                                 const a = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
                                 for (let i = 0; i < enemy.pellets; i++) {
@@ -967,7 +966,6 @@
                                 enemy.worldY += Math.sin(angle) * enemy.speed * dt;
                             }
                             resolveHouseCollisions(enemy);
-                            // Fire only if within vision range
                             if (dist < enemy.visionRange && now - (enemy.lastFire || 0) > enemy.fireCooldown * 1000) {
                                 const a = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
                                 enemyBullets.push({
@@ -1286,7 +1284,6 @@
                         }
                     }
                 } else {
-                    // Still remove bullets that hit houses or go off-screen, but don't damage player
                     for (let i = enemyBullets.length - 1; i >= 0; i--) {
                         const b = enemyBullets[i];
                         b.worldX += b.vx * dt; b.worldY += b.vy * dt;
@@ -1672,6 +1669,8 @@
                     active: true,
                     type: 'pistol'
                 });
+                waveNumber = 0;
+                spawnTimer = 0;
                 deathScreen.style.display = 'none';
             });
 
