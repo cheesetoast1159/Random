@@ -2,589 +2,1797 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>INFINITE PLANE • Regen • Easy Mode • Smart Inventory</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Infinite Plane | Gentle First Wave, Dash Buff & More</title>
     <style>
-        * {
-            user-select: none;
-            touch-action: none;
-        }
         body {
-            margin: 0;
-            overflow: hidden;
-            background: #0a1f1a;
-            font-family: 'Segoe UI', system-ui, monospace;
+            margin: 0; overflow: hidden; background: #1a1a1a; touch-action: none; font-family: sans-serif;
         }
-        canvas {
-            display: block;
-            background: #2c5e3f;
-            cursor: crosshair;
+        canvas { display: block; background: #3a5a40; }
+        .move-joystick-base {
+            position: fixed; bottom: 40px; left: 100px; width: 120px; height: 120px;
+            background: rgba(255,255,255,0.15); border: 3px solid rgba(255,255,255,0.6);
+            border-radius: 50%; transform: translate(-50%,-50%); pointer-events: auto; z-index: 10;
         }
-        /* Joystick bases */
-        .joy-base {
-            position: fixed;
-            width: 130px;
-            height: 130px;
-            background: rgba(0,0,0,0.55);
-            backdrop-filter: blur(8px);
-            border: 2px solid rgba(255,220,150,0.9);
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            pointer-events: auto;
-            z-index: 20;
+        .move-joystick-thumb {
+            position: fixed; bottom: 40px; left: 100px; width: 50px; height: 50px;
+            background: rgba(255,255,255,0.9); border-radius: 50%; transform: translate(-50%,-50%);
+            pointer-events: none; z-index: 11; box-shadow: 0 0 8px rgba(0,0,0,0.5);
+        }
+        #shootBase {
+            position: fixed; bottom: 230px; left: calc(100vw - 140px); width: 120px; height: 120px;
+            background: rgba(255,200,100,0.15); border: 3px solid rgba(255,200,100,0.6);
+            border-radius: 50%; transform: translate(-50%,-50%); pointer-events: auto; z-index: 10; display: none;
+        }
+        #shootThumb {
+            position: fixed; bottom: 230px; left: calc(100vw - 140px); width: 50px; height: 50px;
+            background: rgba(255,200,100,0.9); border-radius: 50%; transform: translate(-50%,-50%);
+            pointer-events: none; z-index: 11; box-shadow: 0 0 8px rgba(0,0,0,0.5); display: none;
+        }
+        #skillBase {
+            position: fixed; bottom: 370px; left: calc(100vw - 140px); width: 120px; height: 120px;
+            background: rgba(100,150,255,0.15); border: 3px solid rgba(100,150,255,0.6);
+            border-radius: 50%; transform: translate(-50%,-50%); pointer-events: auto; z-index: 10; display: none;
+        }
+        #skillThumb {
+            position: fixed; bottom: 370px; left: calc(100vw - 140px); width: 50px; height: 50px;
+            background: rgba(100,150,255,0.9); border-radius: 50%; transform: translate(-50%,-50%);
+            pointer-events: none; z-index: 11; box-shadow: 0 0 8px rgba(0,0,0,0.5); display: none;
+        }
+        #dashButton {
+            position: fixed; bottom: 30px; right: 30px; padding: 18px 28px; font-size: 1.2rem; font-weight: bold;
+            color: white; background: #e63946; border: 4px solid white; border-radius: 50px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.6); cursor: pointer; z-index: 100;
+            transition: background 0.2s, transform 0.1s; user-select: none; touch-action: manipulation;
+        }
+        #dashButton:active { transform: scale(0.95); }
+        #dashButton.disabled { background: #555; border-color: #aaa; pointer-events: none; cursor: not-allowed; }
+        #pickupButton {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); padding: 14px 28px;
+            font-size: 1rem; font-weight: bold; color: white; background: #2a9d8f; border: 3px solid white;
+            border-radius: 30px; cursor: pointer; z-index: 100; display: none; touch-action: manipulation;
             box-shadow: 0 0 15px rgba(0,0,0,0.5);
         }
-        .joy-thumb {
-            position: fixed;
-            width: 55px;
-            height: 55px;
-            background: #ffd966;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-            z-index: 21;
-            box-shadow: 0 0 12px gold;
-        }
-        #shootBase, #skillBase { background: rgba(0,0,0,0.45); }
-        #shootThumb { background: #ff7043; box-shadow: 0 0 12px #ff5722; }
-        #skillThumb { background: #42a5f5; box-shadow: 0 0 12px #2196f3; }
-        .action-btn {
-            position: fixed;
-            padding: 12px 28px;
-            font-weight: bold;
-            color: white;
-            border: 3px solid white;
-            border-radius: 60px;
-            cursor: pointer;
-            z-index: 100;
-            font-size: 1rem;
-            backdrop-filter: blur(8px);
-            transition: 0.05s linear;
-            text-align: center;
-        }
-        #dashBtn {
-            bottom: 30px;
-            right: 30px;
-            background: #d62828;
-        }
-        #dashBtn:active { transform: scale(0.94); background: #b71c1c; }
-        #dashBtn.disabled { background: #5a626e; border-color: #aaa; pointer-events: none; opacity: 0.6; }
-        #pickupBtn {
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #2a9d8f;
-            padding: 10px 32px;
-            display: none;
-            font-size: 0.9rem;
-        }
         #deathScreen {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9);
-            backdrop-filter: blur(12px);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            z-index: 200;
-            color: white;
-            font-size: 3rem;
-            font-weight: bold;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center;
+            flex-direction: column; z-index: 200; color: white; font-size: 2rem; font-weight: bold;
         }
-        #restartBtn {
-            margin-top: 30px;
-            padding: 14px 40px;
-            font-size: 1.3rem;
-            background: #f4a261;
-            border: none;
-            border-radius: 60px;
-            cursor: pointer;
+        #deathScreen button {
+            margin-top: 20px; padding: 12px 24px; font-size: 1.2rem; cursor: pointer;
         }
-        .ui-text {
-            position: fixed;
-            background: rgba(0,0,0,0.6);
-            backdrop-filter: blur(5px);
-            padding: 5px 14px;
-            border-radius: 40px;
-            font-weight: bold;
-            font-family: monospace;
+        .easy-toggle {
+            position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.6); color: #ffd966;
+            padding: 8px 18px; border-radius: 40px; font-weight: bold; font-family: monospace;
+            cursor: pointer; z-index: 150; border: 2px solid #ffb347; backdrop-filter: blur(4px);
             font-size: 0.9rem;
-            pointer-events: none;
-            z-index: 99;
         }
-        #enemyCounter { bottom: 20px; left: 20px; color: #ffd966; }
-        #regenStatus { top: 20px; left: 20px; color: #aaffdd; }
-        #easyToggle {
-            top: 20px;
-            right: 20px;
-            background: rgba(0,0,0,0.7);
-            backdrop-filter: blur(10px);
-            padding: 8px 20px;
-            border-radius: 50px;
-            color: #f9c74f;
-            font-weight: bold;
-            cursor: pointer;
-            border: 2px solid #ffb347;
-            font-family: monospace;
-            pointer-events: auto;
-        }
-        #easyToggle.active { background: #4caf50; color: white; border-color: white; box-shadow: 0 0 15px #4caf50; }
-        .inv-slot {
-            position: fixed;
-            bottom: 120px;
-            left: 20px;
-            display: flex;
-            gap: 8px;
-            background: rgba(0,0,0,0.5);
-            padding: 5px 10px;
-            border-radius: 20px;
-            z-index: 98;
-            pointer-events: none;
-        }
-        .inv-icon {
-            width: 45px;
-            height: 45px;
-            background: rgba(0,0,0,0.6);
-            border: 2px solid white;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 28px;
+        .easy-toggle.active { background: #4caf50; color: white; border-color: white; }
+        .regen-status {
+            position: fixed; top: 20px; left: 20px; background: rgba(0,0,0,0.5);
+            padding: 4px 12px; border-radius: 20px; color: #aaffdd; font-size: 0.8rem;
+            font-family: monospace; pointer-events: none; z-index: 99;
         }
     </style>
 </head>
 <body>
-<canvas id="gameCanvas"></canvas>
-<div class="joy-base" id="moveBase"></div><div class="joy-thumb" id="moveThumb"></div>
-<div class="joy-base" id="shootBase"></div><div class="joy-thumb" id="shootThumb"></div>
-<div class="joy-base" id="skillBase"></div><div class="joy-thumb" id="skillThumb"></div>
-<button id="dashBtn" class="action-btn">⚡ DASH</button>
-<button id="pickupBtn" class="action-btn">📦 PICK UP</button>
-<div id="deathScreen"><div>💀 YOU DIED 💀</div><button id="restartBtn">⟳ RESTART</button></div>
-<div id="enemyCounter" class="ui-text">👥 ENEMIES: 0 / 8</div>
-<div id="regenStatus" class="ui-text">❤️ REGEN: --</div>
-<div id="easyToggle">🔘 EASY MODE: OFF</div>
-<div class="inv-slot" id="invSlots"></div>
+    <canvas id="gameCanvas"></canvas>
+    <div class="move-joystick-base" id="moveBase"></div>
+    <div class="move-joystick-thumb" id="moveThumb"></div>
+    <div id="shootBase"></div>
+    <div id="shootThumb"></div>
+    <div id="skillBase"></div>
+    <div id="skillThumb"></div>
+    <button id="dashButton">DASH</button>
+    <button id="pickupButton">PICK UP</button>
+    <div id="deathScreen">
+        <div>YOU DIED</div>
+        <button id="restartButton">RESTART</button>
+    </div>
+    <div id="easyToggle" class="easy-toggle">🔘 EASY MODE: OFF</div>
+    <div id="regenStatus" class="regen-status">❤️ REGEN: --</div>
 
-<script>
-    (function(){
-        // ---------- CANVAS ----------
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+    <script>
+        (function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            const dashButton = document.getElementById('dashButton');
+            const pickupButton = document.getElementById('pickupButton');
+            const deathScreen = document.getElementById('deathScreen');
+            const restartButton = document.getElementById('restartButton');
+            const moveBaseEl = document.getElementById('moveBase');
+            const moveThumbEl = document.getElementById('moveThumb');
+            const shootBaseEl = document.getElementById('shootBase');
+            const shootThumbEl = document.getElementById('shootThumb');
+            const skillBaseEl = document.getElementById('skillBase');
+            const skillThumbEl = document.getElementById('skillThumb');
+            const easyToggle = document.getElementById('easyToggle');
+            const regenSpan = document.getElementById('regenStatus');
 
-        // ---------- GAME CONST ----------
-        const MAX_ENEMIES = 8;
-        let easyMode = false;
-        const EASY_HP_FACTOR = 0.4;
-        const REGEN_DELAY = 5.0;    // seconds
-        const REGEN_RATE = 12;       // HP/s
-
-        // player
-        let player = {
-            worldX: canvas.width/2,
-            worldY: canvas.height/2,
-            radius: 18,
-            baseSpeed: 280,
-            health: 100,
-            maxHealth: 100,
-            isDead: false
-        };
-        let lastDamageTime = performance.now() / 1000;
-
-        // camera
-        let camX = 0, camY = 0;
-
-        // dash
-        let dashActive = false, dashTimer = 0, dashDir = {x:0,y:0}, dashCooldown = 0;
-        const DASH_DUR = 0.25, DASH_SPEED = 1250, DASH_CD = 1.0;
-
-        // movement & recoil
-        let moveVec = {x:0,y:0}, recoil = {x:0,y:0};
-
-        // inventory (4 slots)
-        let inventory = [null, null, null, null];
-        let currentWeapon = null;
-
-        // weapon data
-        const pistol = { ammo:12, maxAmmo:12, spare:20, reload:1.2, fireRate:0.45, speed:600, dmg:10 };
-        const shotgun = { ammo:8, maxAmmo:8, spare:20, reload:1.8, pellets:8, spread:Math.PI/9, speed:500, dmg:8, recoilForce:400 };
-        const sniper = { ammo:5, maxAmmo:5, spare:10, reload:2.0, fireRate:1.5, speed:6000, dmg:70, recoilForce:600 };
-        const daggerW = { dmg:25, dashDist:120, dashDur:0.12, cd:0.7 };
-        const spray = { ammo:30, maxAmmo:30, spare:5, reload:1.5, burstCount:3, burstDelay:0.06, burstCd:0.25, speed:550, dmg:6, spread:0.15 };
-
-        let isReloading = false, reloadTimer = 0, lastFire = 0;
-        let sprayBurstLeft = 0, sprayBurstTimer = 0, sprayNextBurst = 0;
-        let skillCD = 0, skillDur = 0;
-        let daggerDashActive = false, daggerDashT = 0, daggerDashDir = {x:0,y:0}, daggerDashSpd = 0, daggerCD = 0;
-        let daggerSkillActive = false, daggerSkillT = 0, daggerSkillDir = {x:0,y:0}, daggerSkillSpd = 0;
-        let skillTarget = {x:0,y:0};
-        let spraySkillActive = false, spraySkillBack = false, spraySkillT = 0, spraySkillBullets = 0, spraySkillNextFire = 0, spraySkillAim = {x:0,y:0};
-
-        // world objects
-        let floorItems = [];
-        let enemies = [];
-        let playerBullets = [];
-        let enemyBullets = [];
-        let houses = [];
-        let screenShake = 0, shakeTimer = 0, skillFlash = 0;
-
-        // wave spawn
-        let waveTimer = 0, waveNum = 0;
-        const WAVE_INTERVAL = 4.0;
-        const enemyTypes = ['pistol','sword','spray','gang','shotgun','sniper'];
-        const baseHealth = { pistol:40, sword:60, spray:50, gang:20, shotgun:50, sniper:30 };
-
-        // ---------- helper functions ----------
-        function updateUI() {
-            document.getElementById('enemyCounter').innerHTML = `👥 ENEMIES: ${enemies.length} / ${MAX_ENEMIES}`;
-            let invDiv = document.getElementById('invSlots');
-            invDiv.innerHTML = '';
-            for(let i=0;i<4;i++){
-                let slot = inventory[i];
-                let icon = slot ? (slot.icon || '⬜') : '⬛';
-                invDiv.innerHTML += `<div class="inv-icon" style="border-color:${currentWeapon===slot?.name?'#ffaa44':'white'}">${icon}</div>`;
+            // --- Canvas resize ---
+            function resizeCanvas() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
             }
-        }
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
 
-        function applyEasyHealth(e){
-            let base = baseHealth[e.type] || 30;
-            if(easyMode) e.health = Math.max(1, Math.floor(base * EASY_HP_FACTOR));
-            else e.health = base;
-        }
+            // --- Infinite world camera ---
+            let cameraOffsetX = 0, cameraOffsetY = 0;
+            const CAMERA_FOLLOW_SPEED = 1.5;
 
-        function setEasyMode(val){
-            easyMode = val;
-            let btn = document.getElementById('easyToggle');
-            if(easyMode){ btn.innerText = '🌟 EASY MODE: ON'; btn.classList.add('active'); }
-            else { btn.innerText = '🔘 EASY MODE: OFF'; btn.classList.remove('active'); }
-            for(let e of enemies) applyEasyHealth(e);
-        }
-        document.getElementById('easyToggle').addEventListener('click', ()=> setEasyMode(!easyMode));
+            // --- Player ---
+            const player = {
+                worldX: canvas.width / 2,
+                worldY: canvas.height / 2,
+                radius: 18,
+                baseSpeed: 280,
+                health: 100,
+                maxHealth: 100,
+                isDead: false
+            };
 
-        function damagePlayer(amt){
-            if(player.isDead) return;
-            player.health = Math.max(0, player.health - amt);
-            lastDamageTime = performance.now() / 1000;
-            if(player.health <= 0){ player.isDead = true; document.getElementById('deathScreen').style.display = 'flex'; }
-        }
+            // --- HEALTH REGEN (5 sec no damage) ---
+            let lastDamageTime = performance.now() / 1000;
+            const REGEN_DELAY = 5.0;
+            const REGEN_RATE = 12; // HP per second
 
-        function updateRegen(dt){
-            if(player.isDead) return;
-            let nowSec = performance.now()/1000;
-            let since = nowSec - lastDamageTime;
-            let txt = "❤️ REGEN: ";
-            if(since >= REGEN_DELAY && player.health < player.maxHealth){
-                let heal = REGEN_RATE * dt;
-                player.health = Math.min(player.maxHealth, player.health + heal);
-                txt += `ACTIVE +${Math.floor(heal)}`;
-            } else if(since < REGEN_DELAY) txt += `WAIT ${(REGEN_DELAY-since).toFixed(1)}s`;
-            else txt += "FULL";
-            document.getElementById('regenStatus').innerText = txt;
-        }
+            // --- Dash (movement ability) – buffed speed + invulnerability ---
+            const dashDuration = 0.25;
+            const maxDashSpeed = 1200;
+            const dashDecayRate = 18;
+            const dashCooldown = 1.0;
+            let dashActive = false, dashTimer = 0;
+            let dashDirection = { x: 0, y: 0 };
+            let cooldownTimer = 0;
 
-        // spawn enemy with cap
-        function spawnEnemy(type, wx, wy){
-            if(enemies.length >= MAX_ENEMIES) return;
-            let e = { type, worldX:wx, worldY:wy, radius:16, speed:120, drop:type };
-            if(type==='pistol') e = {...e, radius:18, health:40, speed:120, fireRate:0.6, lastFire:0, dmg:10};
-            else if(type==='sword') e = {...e, radius:14, health:60, speed:160, meleeDmg:25, meleeCd:0.5, lastMelee:0};
-            else if(type==='spray') e = {...e, radius:16, health:50, speed:140, burstCd:0.7, lastBurst:0, burstCount:3, burstDmg:4};
-            else if(type==='gang') e = {...e, radius:12, health:20, speed:130, meleeDmg:15, meleeCd:0.6, lastMelee:0};
-            else if(type==='shotgun') e = {...e, radius:16, health:50, speed:140, fireCd:0.9, lastFire:0, pellets:5, dmg:6, spreadAngle:0.3};
-            else if(type==='sniper') e = {...e, radius:16, health:30, speed:100, fireCd:1.2, lastFire:0, bulletSpeed:800, dmg:25};
-            applyEasyHealth(e);
-            enemies.push(e);
-            updateUI();
-        }
+            // --- Inventory & Weapons ---
+            const inventory = [null, null, null, null];
+            let currentWeapon = null;
 
-        function spawnWave(){
-            if(enemies.length >= MAX_ENEMIES) return;
-            waveNum++;
-            let add = Math.min(1 + Math.floor((waveNum-1)/2), 5);
-            let slots = MAX_ENEMIES - enemies.length;
-            let toSpawn = Math.min(add, slots);
-            for(let i=0;i<toSpawn;i++){
-                let type = enemyTypes[Math.floor(Math.random()*enemyTypes.length)];
-                let ang = Math.random()*Math.PI*2;
-                let dist = 400 + Math.random()*280;
-                let wx = player.worldX + Math.cos(ang)*dist;
-                let wy = player.worldY + Math.sin(ang)*dist;
-                spawnEnemy(type, wx, wy);
-            }
-        }
+            const pistolState = { ammo: 12, maxAmmo: 12, spare: 20, reloadTime: 1.2, fireRate: 0.45, bulletSpeed: 600, damage: 10 };
+            const shotgunState = { ammo: 8, maxAmmo: 8, spare: 20, reloadTime: 1.8, pellets: 8, spreadAngle: Math.PI / 9, bulletSpeed: 500, damage: 8, recoilForce: 400 };
+            const sniperState = { ammo: 5, maxAmmo: 5, spare: 10, reloadTime: 2.0, fireRate: 1.5, bulletSpeed: 6000, damage: 70, recoilForce: 600 };
+            const daggerState = { damage: 25, dashDistance: 120, dashDuration: 0.12, cooldown: 0.7 };
+            const sprayState = { ammo: 30, maxAmmo: 30, spare: 5, reloadTime: 1.5, burstCount: 3, burstFireRate: 0.06, burstCooldown: 0.25, bulletSpeed: 550, damage: 6, spread: 0.15 };
 
-        // inventory: full -> replace current weapon (drop old)
-        function pickupWeapon(item){
-            let full = inventory.every(s => s !== null);
-            if(full){
-                if(currentWeapon) floorItems.push({ worldX:player.worldX, worldY:player.worldY, radius:15, active:true, type:currentWeapon });
-                let idx = inventory.findIndex(s => s && s.name === currentWeapon);
-                if(idx !== -1){
-                    let icons = { pistol:'🔫', shotgun:'🖖', sniper:'🔭', dagger:'🗡️', spray:'💥' };
-                    inventory[idx] = { name:item.type, icon:icons[item.type] };
-                    equipWeapon(item.type);
-                }
-                item.active = false;
-                updateUI();
-                return;
-            }
-            let slot = inventory.findIndex(s => !s);
-            if(slot === -1) return;
-            let icons = { pistol:'🔫', shotgun:'🖖', sniper:'🔭', dagger:'🗡️', spray:'💥' };
-            inventory[slot] = { name:item.type, icon:icons[item.type] };
-            item.active = false;
-            if(currentWeapon !== item.type) equipWeapon(item.type);
-            updateUI();
-        }
+            let isReloading = false, reloadTimer = 0;
+            let lastFireTime = 0;
 
-        function equipWeapon(type){
-            currentWeapon = type;
-            isReloading = false;
-            daggerDashActive = false; daggerSkillActive = false; spraySkillActive = false;
-            if(type === 'shotgun' || type === 'sniper' || type === 'dagger' || type === 'spray'){
-                document.getElementById('skillBase').style.display = 'block';
-                document.getElementById('skillThumb').style.display = 'block';
-                skillDur = type==='shotgun'?1.0 : (type==='sniper'?8.0 : (type==='dagger'?7.0:6.0));
-                skillCD = 0;
-            } else {
-                document.getElementById('skillBase').style.display = 'none';
-                document.getElementById('skillThumb').style.display = 'none';
-            }
-            document.getElementById('shootBase').style.display = 'block';
-            document.getElementById('shootThumb').style.display = 'block';
-        }
+            let sprayBurstBulletsLeft = 0, sprayBurstTimer = 0, sprayNextBurstTime = 0;
 
-        // house generation & collision
-        function generateHouses(){
-            for(let i=0;i<18;i++){
-                let x = (Math.random()-0.5)*1800, y = (Math.random()-0.5)*1800;
-                if(Math.hypot(x-player.worldX, y-player.worldY) < 180) continue;
-                let w = 45+Math.random()*55, h = 45+Math.random()*55;
-                houses.push([{ x:x-w/2, y:y-h/2, w, h }]);
-            }
-        }
-        generateHouses();
+            let skillCooldown = 0, skillCooldownDuration = 0;
 
-        function collideWithHouses(entity){
-            for(let group of houses){
-                for(let rect of group){
-                    let cx = Math.max(rect.x, Math.min(entity.worldX, rect.x+rect.w));
-                    let cy = Math.max(rect.y, Math.min(entity.worldY, rect.y+rect.h));
-                    let dx = entity.worldX-cx, dy = entity.worldY-cy;
-                    let dist = Math.hypot(dx,dy);
-                    if(dist < entity.radius){
-                        let ang = Math.atan2(dy,dx);
-                        let overlap = entity.radius - dist;
-                        entity.worldX += Math.cos(ang)*overlap;
-                        entity.worldY += Math.sin(ang)*overlap;
+            let daggerDashing = false, daggerDashTimer = 0;
+            let daggerDashDirection = { x: 0, y: 0 }, daggerDashSpeed = 0, daggerCooldown = 0;
+
+            let daggerSkillDashActive = false, daggerSkillDashTimer = 0;
+            let daggerSkillDashDuration = 0.35, daggerSkillDashDistance = 380;
+            let daggerSkillDashDirection = { x: 0, y: 0 }, daggerSkillDashSpeed = 0;
+            let daggerSkillExplosionQueue = [], daggerSkillExplosions = [], daggerSkillIndicators = [];
+
+            let spraySkillActive = false, spraySkillDashBackward = false, spraySkillDashTimer = 0;
+            let spraySkillDashDuration = 0.25, spraySkillDashDistance = 120, spraySkillBulletCount = 40;
+            let spraySkillSpread = 1.2, spraySkillBulletsLeft = 0, spraySkillFireRate = 0.03;
+            let spraySkillNextFireTime = 0, spraySkillAimDirX = 0, spraySkillAimDirY = 0;
+
+            let recoilVelX = 0, recoilVelY = 0;
+
+            // --- Floor items (drops + initial pistol) ---
+            let floorItems = [];
+            floorItems.push({
+                worldX: player.worldX,
+                worldY: player.worldY,
+                radius: 15,
+                active: true,
+                type: 'pistol'
+            });
+
+            const playerBullets = [], enemyBullets = [], enemies = [];
+            const smokeClouds = [], grenades = [];
+
+            // --- Houses ---
+            const houses = [];
+            function generateHouses() {
+                const numHouses = 20;
+                for (let i = 0; i < numHouses; i++) {
+                    let x, y, valid;
+                    do {
+                        x = (Math.random() - 0.5) * 2000;
+                        y = (Math.random() - 0.5) * 2000;
+                        valid = true;
+                        if (Math.hypot(x - player.worldX, y - player.worldY) < 200) valid = false;
+                    } while (!valid);
+                    const shape = Math.random() < 0.5 ? 'single' : 'L';
+                    const rects = [];
+                    const baseW = 60 + Math.random() * 40;
+                    const baseH = 60 + Math.random() * 40;
+                    if (shape === 'single') {
+                        rects.push({ x: x - baseW/2, y: y - baseH/2, w: baseW, h: baseH });
+                    } else {
+                        const secondW = 40 + Math.random() * 30, secondH = 40 + Math.random() * 30;
+                        rects.push({ x: x - baseW/2, y: y - baseH/2, w: baseW, h: baseH });
+                        const side = Math.floor(Math.random() * 4);
+                        if (side === 0) rects.push({ x: x - secondW/2, y: y - baseH/2 - secondH, w: secondW, h: secondH });
+                        else if (side === 1) rects.push({ x: x + baseW/2, y: y - secondH/2, w: secondW, h: secondH });
+                        else if (side === 2) rects.push({ x: x - secondW/2, y: y + baseH/2, w: secondW, h: secondH });
+                        else rects.push({ x: x - baseW/2 - secondW, y: y - secondH/2, w: secondW, h: secondH });
                     }
+                    houses.push(rects);
                 }
             }
-        }
+            generateHouses();
 
-        // shooting
-        function firePistol(dirX, dirY, now){
-            if(isReloading || pistol.ammo <= 0){ if(pistol.ammo===0 && !isReloading){ isReloading=true; reloadTimer=pistol.reload; } return false; }
-            if(now - lastFire < pistol.fireRate*1000) return false;
-            let mag = Math.hypot(dirX,dirY);
-            let vx = (dirX/mag)*pistol.speed, vy = (dirY/mag)*pistol.speed;
-            playerBullets.push({ worldX:player.worldX, worldY:player.worldY, vx, vy, radius:5, dmg:pistol.dmg, isBeam:false });
-            pistol.ammo--;
-            lastFire = now;
-            screenShake=3; shakeTimer=0.07;
-            if(pistol.ammo===0 && !isReloading){ isReloading=true; reloadTimer=pistol.reload; }
-            return true;
-        }
+            let sniperSpread = 0.3;
+            const SNIPER_MAX_SPREAD = 0.3, SNIPER_MIN_SPREAD = 0.0, SNIPER_SPREAD_RECOVERY = 0.3;
+            let sniperAimAngle = 0;
+            const SNIPER_OSCILLATION_SPEED = 2.5;
+            let screenShake = 0, shakeDuration = 0, skillFlashAlpha = 0;
 
-        function fireShotgun(dirX, dirY){
-            if(isReloading || shotgun.ammo <= 0){ if(shotgun.ammo===0 && !isReloading){ isReloading=true; reloadTimer=shotgun.reload; } return; }
-            let mag = Math.hypot(dirX,dirY);
-            let baseX = dirX/mag, baseY = dirY/mag;
-            for(let i=0;i<shotgun.pellets;i++){
-                let angle = Math.atan2(baseY, baseX) + (Math.random()*2-1)*shotgun.spread;
-                let spd = shotgun.speed + (Math.random()*100-50);
-                playerBullets.push({ worldX:player.worldX, worldY:player.worldY, vx:Math.cos(angle)*spd, vy:Math.sin(angle)*spd, radius:3, dmg:shotgun.dmg, isBeam:false });
+            // --- Spawn control (gentle first wave) with global enemy cap = 8 ---
+            let spawnTimer = 0;
+            const SPAWN_INTERVAL = 4.0;
+            let waveNumber = 0;
+            const ENEMY_TYPES = ['pistol', 'sword', 'spray', 'gang', 'shotgun', 'sniper'];
+            const MAX_ENEMIES_ALIVE = 8;  // NEW: hard cap
+
+            // --- Easy Mode: reduce enemy HP to 40% ---
+            let easyMode = false;
+            const BASE_ENEMY_HEALTH = {
+                pistol: 40, sword: 60, spray: 50, gang: 20, shotgun: 50, sniper: 30
+            };
+            function applyEasyModeHealth(enemy) {
+                if (!enemy.type) return;
+                let base = BASE_ENEMY_HEALTH[enemy.type] || 30;
+                if (easyMode) enemy.health = Math.max(1, Math.floor(base * 0.4));
+                else enemy.health = base;
             }
-            shotgun.ammo--;
-            recoil.x -= baseX * shotgun.recoilForce;
-            recoil.y -= baseY * shotgun.recoilForce;
-            screenShake=6; shakeTimer=0.12;
-            if(shotgun.ammo===0 && !isReloading){ isReloading=true; reloadTimer=shotgun.reload; }
-        }
-
-        // ----- JOYSTICKS (full working) -----
-        let moveId=null, moveCenter={x:0,y:0}, moveMax=0;
-        let shootId=null, shootCenter={x:0,y:0}, shootMax=0, shootActive=false, shootDir={x:0,y:0};
-        let skillId=null, skillCenter={x:0,y:0}, skillMax=0, skillActive=false, skillDir={x:0,y:0};
-
-        const moveBase=document.getElementById('moveBase'), moveThumb=document.getElementById('moveThumb');
-        const shootBase=document.getElementById('shootBase'), shootThumb=document.getElementById('shootThumb');
-        const skillBase=document.getElementById('skillBase'), skillThumb=document.getElementById('skillThumb');
-
-        function updateMoveRect(){ let r=moveBase.getBoundingClientRect(); moveCenter={x:r.left+r.width/2, y:r.top+r.height/2}; moveMax=(r.width/2)-(moveThumb.offsetWidth/2); }
-        function updateShootRect(){ let r=shootBase.getBoundingClientRect(); shootCenter={x:r.left+r.width/2, y:r.top+r.height/2}; shootMax=(r.width/2)-(shootThumb.offsetWidth/2); }
-        function updateSkillRect(){ let r=skillBase.getBoundingClientRect(); skillCenter={x:r.left+r.width/2, y:r.top+r.height/2}; skillMax=(r.width/2)-(skillThumb.offsetWidth/2); }
-
-        function setMoveThumb(cx,cy){ let dx=cx-moveCenter.x, dy=cy-moveCenter.y; let d=Math.hypot(dx,dy); if(d>moveMax){dx=(dx/d)*moveMax; dy=(dy/d)*moveMax;} moveThumb.style.left=(moveCenter.x+dx)+'px'; moveThumb.style.top=(moveCenter.y+dy)+'px'; moveVec.x=d>1?dx/moveMax:0; moveVec.y=d>1?dy/moveMax:0; }
-        function resetMove(){ moveThumb.style.left=moveCenter.x+'px'; moveThumb.style.top=moveCenter.y+'px'; moveVec={x:0,y:0}; moveId=null; }
-        function setShootThumb(cx,cy){ let dx=cx-shootCenter.x, dy=cy-shootCenter.y; let d=Math.hypot(dx,dy); if(d>shootMax){dx=(dx/d)*shootMax; dy=(dy/d)*shootMax;} shootThumb.style.left=(shootCenter.x+dx)+'px'; shootThumb.style.top=(shootCenter.y+dy)+'px'; shootDir.x=d>1?dx/shootMax:0; shootDir.y=d>1?dy/shootMax:0; }
-        function resetShoot(){ shootThumb.style.left=shootCenter.x+'px'; shootThumb.style.top=shootCenter.y+'px'; shootDir={x:0,y:0}; shootId=null; shootActive=false; }
-        function setSkillThumb(cx,cy){ let dx=cx-skillCenter.x, dy=cy-skillCenter.y; let d=Math.hypot(dx,dy); if(d>skillMax){dx=(dx/d)*skillMax; dy=(dy/d)*skillMax;} skillThumb.style.left=(skillCenter.x+dx)+'px'; skillThumb.style.top=(skillCenter.y+dy)+'px'; skillDir.x=d>1?dx/skillMax:0; skillDir.y=d>1?dy/skillMax:0; if(d>0){ let range= currentWeapon==='shotgun'?120:(currentWeapon==='dagger'?380:200); let mag=Math.hypot(skillDir.x,skillDir.y); skillTarget.x=player.worldX+(skillDir.x/mag)*range; skillTarget.y=player.worldY+(skillDir.y/mag)*range; } }
-        function resetSkill(){ skillThumb.style.left=skillCenter.x+'px'; skillThumb.style.top=skillCenter.y+'px'; skillDir={x:0,y:0}; skillId=null; skillActive=false; }
-
-        updateMoveRect(); updateShootRect(); updateSkillRect();
-        window.addEventListener('resize',()=>{ updateMoveRect(); updateShootRect(); updateSkillRect(); });
-
-        moveBase.addEventListener('pointerdown',(e)=>{ if(moveId===null && !player.isDead){ e.preventDefault(); moveId=e.pointerId; moveBase.setPointerCapture(e.pointerId); updateMoveRect(); setMoveThumb(e.clientX,e.clientY); } });
-        moveBase.addEventListener('pointermove',(e)=>{ if(moveId===e.pointerId){ e.preventDefault(); setMoveThumb(e.clientX,e.clientY); } });
-        moveBase.addEventListener('pointerup',(e)=>{ if(moveId===e.pointerId){ resetMove(); moveBase.releasePointerCapture(e.pointerId); } });
-        window.addEventListener('pointermove',(e)=>{ if(moveId===e.pointerId) setMoveThumb(e.clientX,e.clientY); });
-
-        shootBase.addEventListener('pointerdown',(e)=>{ if(shootId===null && currentWeapon && !player.isDead){ e.preventDefault(); shootId=e.pointerId; shootBase.setPointerCapture(e.pointerId); updateShootRect(); setShootThumb(e.clientX,e.clientY); shootActive=true; } });
-        shootBase.addEventListener('pointermove',(e)=>{ if(shootId===e.pointerId){ e.preventDefault(); setShootThumb(e.clientX,e.clientY); } });
-        shootBase.addEventListener('pointerup',(e)=>{ if(shootId===e.pointerId){ if(shootActive && (shootDir.x!==0||shootDir.y!==0) && !player.isDead){ if(currentWeapon==='pistol') firePistol(shootDir.x, shootDir.y, performance.now()); else if(currentWeapon==='shotgun') fireShotgun(shootDir.x, shootDir.y); } resetShoot(); shootBase.releasePointerCapture(e.pointerId); } });
-        window.addEventListener('pointerup',(e)=>{ if(shootId===e.pointerId) resetShoot(); });
-
-        // dash trigger
-        function triggerDash(){ if(dashCooldown>0 || dashActive || player.isDead) return; if(moveVec.x===0 && moveVec.y===0) return; let mag=Math.hypot(moveVec.x,moveVec.y); dashDir.x=moveVec.x/mag; dashDir.y=moveVec.y/mag; dashActive=true; dashTimer=0; }
-        document.getElementById('dashBtn').addEventListener('click', triggerDash);
-
-        // pickup
-        function checkPickup(){
-            let near = false;
-            for(let it of floorItems) if(it.active && Math.hypot(player.worldX-it.worldX, player.worldY-it.worldY)<55) near=true;
-            document.getElementById('pickupBtn').style.display = near ? 'block' : 'none';
-        }
-        document.getElementById('pickupBtn').addEventListener('click', ()=>{
-            let best=null, bestD=Infinity;
-            for(let it of floorItems) if(it.active){ let d=Math.hypot(player.worldX-it.worldX, player.worldY-it.worldY); if(d<bestD){ bestD=d; best=it; } }
-            if(best && bestD<55) pickupWeapon(best);
-        });
-
-        // enemy AI (simple)
-        function updateEnemies(dt, now){
-            for(let i=0;i<enemies.length;i++){
-                let e = enemies[i];
-                let dx = player.worldX - e.worldX, dy = player.worldY - e.worldY;
-                let dist = Math.hypot(dx,dy);
-                if(e.type === 'pistol'){
-                    if(dist>120){ let ang=Math.atan2(dy,dx); e.worldX+=Math.cos(ang)*e.speed*dt; e.worldY+=Math.sin(ang)*e.speed*dt; }
-                    collideWithHouses(e);
-                    if(dist<400 && now - (e.lastFire||0) > e.fireRate*1000){
-                        let ang=Math.atan2(dy,dx);
-                        enemyBullets.push({ worldX:e.worldX, worldY:e.worldY, vx:Math.cos(ang)*550, vy:Math.sin(ang)*550, radius:4, dmg:e.dmg });
-                        e.lastFire=now;
-                    }
+            function setEasyMode(val) {
+                easyMode = val;
+                if (easyMode) {
+                    easyToggle.innerText = '🌟 EASY MODE: ON';
+                    easyToggle.classList.add('active');
+                } else {
+                    easyToggle.innerText = '🔘 EASY MODE: OFF';
+                    easyToggle.classList.remove('active');
                 }
-                if(e.type === 'sword' || e.type === 'gang'){
-                    let sp = e.speed;
-                    if(dist>25){ let ang=Math.atan2(dy,dx); e.worldX+=Math.cos(ang)*sp*dt; e.worldY+=Math.sin(ang)*sp*dt; }
-                    collideWithHouses(e);
-                    let invul = dashActive || daggerDashActive || daggerSkillActive || spraySkillBack;
-                    if(dist < player.radius+e.radius && now - (e.lastMelee||0) > (e.meleeCd||0.5)*1000 && !invul){
-                        damagePlayer(e.meleeDmg||15);
-                        e.lastMelee = now;
-                    }
-                }
-                // other types stub (keep it simple but functional)
+                for (let e of enemies) applyEasyModeHealth(e);
             }
-        }
+            easyToggle.addEventListener('click', () => setEasyMode(!easyMode));
 
-        function updateBullets(dt){
-            for(let i=0;i<playerBullets.length;i++){
-                let b=playerBullets[i];
-                b.worldX+=b.vx*dt; b.worldY+=b.vy*dt;
-                let hit=false;
-                for(let j=0;j<enemies.length;j++){
-                    let e=enemies[j];
-                    if(Math.hypot(b.worldX-e.worldX, b.worldY-e.worldY) < e.radius+5){
-                        e.health -= b.dmg;
-                        if(e.health<=0){
-                            floorItems.push({ worldX:e.worldX, worldY:e.worldY, radius:15, active:true, type:e.drop });
-                            enemies.splice(j,1);
-                            updateUI();
+            // ========== Joystick helpers (same as original) ==========
+            let movePointerId = null, moveBaseCenter = { x:0, y:0 }, moveMaxDist = 0;
+            let moveVec = { x:0, y:0 };
+            let shootPointerId = null, shootBaseCenter = { x:0, y:0 }, shootMaxDist = 0;
+            let shootVec = { x:0, y:0 }, shootActive = false;
+            let skillPointerId = null, skillBaseCenter = { x:0, y:0 }, skillMaxDist = 0;
+            let skillVec = { x:0, y:0 }, skillActive = false;
+            let skillTargetWorld = { x:0, y:0 };
+
+            function updateMoveBase() {
+                const rect = moveBaseEl.getBoundingClientRect();
+                moveBaseCenter.x = rect.left + rect.width/2;
+                moveBaseCenter.y = rect.top + rect.height/2;
+                moveMaxDist = (rect.width/2) - (moveThumbEl.offsetWidth/2);
+                if (moveMaxDist < 0) moveMaxDist = 0;
+            }
+            function updateShootBase() {
+                const rect = shootBaseEl.getBoundingClientRect();
+                shootBaseCenter.x = rect.left + rect.width/2;
+                shootBaseCenter.y = rect.top + rect.height/2;
+                shootMaxDist = (rect.width/2) - (shootThumbEl.offsetWidth/2);
+                if (shootMaxDist < 0) shootMaxDist = 0;
+            }
+            function updateSkillBase() {
+                const rect = skillBaseEl.getBoundingClientRect();
+                skillBaseCenter.x = rect.left + rect.width/2;
+                skillBaseCenter.y = rect.top + rect.height/2;
+                skillMaxDist = (rect.width/2) - (skillThumbEl.offsetWidth/2);
+                if (skillMaxDist < 0) skillMaxDist = 0;
+            }
+            function moveMoveThumb(cx, cy) {
+                let dx = cx - moveBaseCenter.x, dy = cy - moveBaseCenter.y;
+                let dist = Math.hypot(dx, dy);
+                if (dist > moveMaxDist) { dx = (dx/dist)*moveMaxDist; dy = (dy/dist)*moveMaxDist; dist = moveMaxDist; }
+                moveThumbEl.style.left = (moveBaseCenter.x + dx) + 'px';
+                moveThumbEl.style.top = (moveBaseCenter.y + dy) + 'px';
+                moveVec.x = dist > 1 ? dx / moveMaxDist : 0;
+                moveVec.y = dist > 1 ? dy / moveMaxDist : 0;
+            }
+            function resetMoveThumb() {
+                moveThumbEl.style.left = moveBaseCenter.x + 'px';
+                moveThumbEl.style.top = moveBaseCenter.y + 'px';
+                moveVec.x = 0; moveVec.y = 0; movePointerId = null;
+            }
+            function moveShootThumb(cx, cy) {
+                let dx = cx - shootBaseCenter.x, dy = cy - shootBaseCenter.y;
+                let dist = Math.hypot(dx, dy);
+                if (dist > shootMaxDist) { dx = (dx/dist)*shootMaxDist; dy = (dy/dist)*shootMaxDist; dist = shootMaxDist; }
+                shootThumbEl.style.left = (shootBaseCenter.x + dx) + 'px';
+                shootThumbEl.style.top = (shootBaseCenter.y + dy) + 'px';
+                shootVec.x = dist > 1 ? dx / shootMaxDist : 0;
+                shootVec.y = dist > 1 ? dy / shootMaxDist : 0;
+            }
+            function resetShootThumb() {
+                shootThumbEl.style.left = shootBaseCenter.x + 'px';
+                shootThumbEl.style.top = shootBaseCenter.y + 'px';
+                shootVec.x = 0; shootVec.y = 0; shootPointerId = null; shootActive = false;
+            }
+            function moveSkillThumb(cx, cy) {
+                let dx = cx - skillBaseCenter.x, dy = cy - skillBaseCenter.y;
+                let dist = Math.hypot(dx, dy);
+                if (dist > skillMaxDist) { dx = (dx/dist)*skillMaxDist; dy = (dy/dist)*skillMaxDist; dist = skillMaxDist; }
+                skillThumbEl.style.left = (skillBaseCenter.x + dx) + 'px';
+                skillThumbEl.style.top = (skillBaseCenter.y + dy) + 'px';
+                skillVec.x = dist > 1 ? dx / skillMaxDist : 0;
+                skillVec.y = dist > 1 ? dy / skillMaxDist : 0;
+                if (dist > 0) {
+                    const range = currentWeapon === 'shotgun' ? 120 : (currentWeapon === 'dagger' ? daggerSkillDashDistance : 200);
+                    const mag = Math.hypot(skillVec.x, skillVec.y);
+                    skillTargetWorld.x = player.worldX + (skillVec.x / mag) * range;
+                    skillTargetWorld.y = player.worldY + (skillVec.y / mag) * range;
+                }
+            }
+            function resetSkillThumb() {
+                skillThumbEl.style.left = skillBaseCenter.x + 'px';
+                skillThumbEl.style.top = skillBaseCenter.y + 'px';
+                skillVec.x = 0; skillVec.y = 0; skillPointerId = null; skillActive = false;
+            }
+
+            updateMoveBase(); updateShootBase(); updateSkillBase();
+            window.addEventListener('resize', () => { updateMoveBase(); updateShootBase(); updateSkillBase(); });
+
+            // Joystick events (same as original)
+            moveBaseEl.addEventListener('pointerdown', (e) => {
+                if (e.target === moveBaseEl && movePointerId === null && !player.isDead) {
+                    e.preventDefault();
+                    movePointerId = e.pointerId;
+                    moveBaseEl.setPointerCapture(e.pointerId);
+                    updateMoveBase();
+                    moveMoveThumb(e.clientX, e.clientY);
+                }
+            });
+            moveBaseEl.addEventListener('pointermove', (e) => {
+                if (movePointerId === e.pointerId) { e.preventDefault(); moveMoveThumb(e.clientX, e.clientY); }
+            });
+            const moveUp = (e) => {
+                if (movePointerId === e.pointerId) { e.preventDefault(); resetMoveThumb(); moveBaseEl.releasePointerCapture(e.pointerId); }
+            };
+            moveBaseEl.addEventListener('pointerup', moveUp);
+            moveBaseEl.addEventListener('pointercancel', moveUp);
+            window.addEventListener('pointermove', (e) => { if (movePointerId === e.pointerId) moveMoveThumb(e.clientX, e.clientY); });
+            window.addEventListener('pointerup', (e) => { if (movePointerId === e.pointerId) resetMoveThumb(); });
+
+            shootBaseEl.addEventListener('pointerdown', (e) => {
+                if (e.target === shootBaseEl && shootPointerId === null && currentWeapon && !player.isDead) {
+                    e.preventDefault();
+                    shootPointerId = e.pointerId;
+                    shootBaseEl.setPointerCapture(e.pointerId);
+                    updateShootBase();
+                    moveShootThumb(e.clientX, e.clientY);
+                    shootActive = true;
+                }
+            });
+            shootBaseEl.addEventListener('pointermove', (e) => {
+                if (shootPointerId === e.pointerId) { e.preventDefault(); moveShootThumb(e.clientX, e.clientY); }
+            });
+            const shootUp = (e) => {
+                if (shootPointerId === e.pointerId) {
+                    e.preventDefault();
+                    if (shootActive && !player.isDead) {
+                        if (currentWeapon === 'dagger' && (shootVec.x !== 0 || shootVec.y !== 0)) {
+                            triggerDaggerBasicDash();
+                        } else if (shootVec.x !== 0 || shootVec.y !== 0) {
+                            if (currentWeapon === 'shotgun') fireShotgun();
+                            else if (currentWeapon === 'sniper') fireSniper();
                         }
-                        hit=true; break;
+                    }
+                    resetShootThumb();
+                    shootBaseEl.releasePointerCapture(e.pointerId);
+                }
+            };
+            shootBaseEl.addEventListener('pointerup', shootUp);
+            shootBaseEl.addEventListener('pointercancel', shootUp);
+            window.addEventListener('pointermove', (e) => { if (shootPointerId === e.pointerId) moveShootThumb(e.clientX, e.clientY); });
+            window.addEventListener('pointerup', (e) => {
+                if (shootPointerId === e.pointerId) {
+                    if (shootActive && !player.isDead && (shootVec.x !== 0 || shootVec.y !== 0)) {
+                        if (currentWeapon === 'dagger') triggerDaggerBasicDash();
+                        else if (currentWeapon === 'shotgun') fireShotgun();
+                        else if (currentWeapon === 'sniper') fireSniper();
+                    }
+                    resetShootThumb();
+                }
+            });
+
+            skillBaseEl.addEventListener('pointerdown', (e) => {
+                if (e.target === skillBaseEl && skillPointerId === null && (currentWeapon === 'shotgun' || currentWeapon === 'sniper' || currentWeapon === 'dagger' || currentWeapon === 'spray') && skillCooldown <= 0 && !player.isDead) {
+                    e.preventDefault();
+                    skillPointerId = e.pointerId;
+                    skillBaseEl.setPointerCapture(e.pointerId);
+                    updateSkillBase();
+                    moveSkillThumb(e.clientX, e.clientY);
+                    skillActive = true;
+                }
+            });
+            skillBaseEl.addEventListener('pointermove', (e) => {
+                if (skillPointerId === e.pointerId) { e.preventDefault(); moveSkillThumb(e.clientX, e.clientY); }
+            });
+            const skillUp = (e) => {
+                if (skillPointerId === e.pointerId) {
+                    e.preventDefault();
+                    if (skillActive && (skillVec.x !== 0 || skillVec.y !== 0) && !player.isDead) {
+                        if (currentWeapon === 'shotgun') executeShotgunSkill();
+                        else if (currentWeapon === 'sniper') executeSniperSkill();
+                        else if (currentWeapon === 'dagger') executeDaggerLongDashSkill();
+                        else if (currentWeapon === 'spray') executeSpraySkill();
+                    }
+                    resetSkillThumb();
+                    skillBaseEl.releasePointerCapture(e.pointerId);
+                }
+            };
+            skillBaseEl.addEventListener('pointerup', skillUp);
+            skillBaseEl.addEventListener('pointercancel', skillUp);
+            window.addEventListener('pointermove', (e) => { if (skillPointerId === e.pointerId) moveSkillThumb(e.clientX, e.clientY); });
+            window.addEventListener('pointerup', (e) => {
+                if (skillPointerId === e.pointerId) {
+                    if (skillActive && (skillVec.x !== 0 || skillVec.y !== 0) && !player.isDead) {
+                        if (currentWeapon === 'shotgun') executeShotgunSkill();
+                        else if (currentWeapon === 'sniper') executeSniperSkill();
+                        else if (currentWeapon === 'dagger') executeDaggerLongDashSkill();
+                        else if (currentWeapon === 'spray') executeSpraySkill();
+                    }
+                    resetSkillThumb();
+                }
+            });
+
+            // ========== Dash (movement ability) ==========
+            function updateDashUI() {
+                if (cooldownTimer > 0) { dashButton.textContent = 'COOLING...'; dashButton.classList.add('disabled'); }
+                else if (dashActive) { dashButton.textContent = 'DASHING!'; dashButton.classList.add('disabled'); }
+                else { dashButton.textContent = 'DASH'; dashButton.classList.remove('disabled'); }
+            }
+            function triggerDash() {
+                if (cooldownTimer > 0 || dashActive || player.isDead) return;
+                if (moveVec.x === 0 && moveVec.y === 0) return;
+                const mag = Math.hypot(moveVec.x, moveVec.y);
+                dashDirection.x = moveVec.x / mag;
+                dashDirection.y = moveVec.y / mag;
+                dashActive = true; dashTimer = 0;
+                updateDashUI();
+            }
+            dashButton.addEventListener('pointerdown', (e) => { e.preventDefault(); triggerDash(); });
+            dashButton.addEventListener('touchstart', (e) => { e.preventDefault(); triggerDash(); });
+
+            // ========== Pickup with full inventory replacement ==========
+            pickupButton.addEventListener('pointerdown', (e) => { e.preventDefault(); handlePickup(); });
+            pickupButton.addEventListener('touchstart', (e) => { e.preventDefault(); handlePickup(); });
+
+            function handlePickup() {
+                let nearestItem = null, nearestDist = Infinity;
+                for (const item of floorItems) {
+                    if (!item.active) continue;
+                    const d = Math.hypot(player.worldX - item.worldX, player.worldY - item.worldY);
+                    if (d < nearestDist) { nearestDist = d; nearestItem = item; }
+                }
+                if (nearestItem && nearestDist < 50) pickupWeapon(nearestItem);
+            }
+
+            function pickupWeapon(item) {
+                // If inventory full, drop current weapon at feet
+                const allFilled = inventory.every(slot => slot !== null);
+                if (allFilled && currentWeapon) {
+                    floorItems.push({ worldX: player.worldX, worldY: player.worldY, radius: 15, active: true, type: currentWeapon });
+                    // replace the slot that holds current weapon
+                    const slotIndex = inventory.findIndex(slot => slot && slot.name === currentWeapon);
+                    if (slotIndex !== -1) {
+                        const iconMap = { pistol:'🔫', shotgun:'🖖', sniper:'🔭', dagger:'🗡️', spray:'💥' };
+                        inventory[slotIndex] = { name: item.type, icon: iconMap[item.type] };
+                        equipWeapon(item.type);
+                    }
+                    item.active = false;
+                    shootBaseEl.style.display = 'block';
+                    shootThumbEl.style.display = 'block';
+                    updateShootBase();
+                    pickupButton.style.display = 'none';
+                    return;
+                }
+                // normal pickup
+                const slot = inventory.findIndex(s => !s);
+                if (slot === -1) return;
+                const iconMap = { pistol:'🔫', shotgun:'🖖', sniper:'🔭', dagger:'🗡️', spray:'💥' };
+                inventory[slot] = { name: item.type, icon: iconMap[item.type] };
+                item.active = false;
+                if (currentWeapon !== item.type) equipWeapon(item.type);
+                shootBaseEl.style.display = 'block';
+                shootThumbEl.style.display = 'block';
+                updateShootBase();
+                pickupButton.style.display = 'none';
+            }
+
+            function equipWeapon(type) {
+                currentWeapon = type;
+                isReloading = false;
+                daggerDashing = false;
+                daggerSkillDashActive = false;
+                daggerSkillExplosionQueue = [];
+                daggerSkillExplosions = [];
+                daggerSkillIndicators = [];
+                spraySkillActive = false;
+                spraySkillDashBackward = false;
+                spraySkillBulletsLeft = 0;
+                if (type === 'shotgun' || type === 'sniper' || type === 'dagger' || type === 'spray') {
+                    skillBaseEl.style.display = 'block';
+                    skillThumbEl.style.display = 'block';
+                    updateSkillBase();
+                    skillCooldownDuration = type === 'shotgun' ? 1.0 : (type === 'sniper' ? 8.0 : (type === 'dagger' ? 7.0 : 6.0));
+                    skillCooldown = 0;
+                } else {
+                    skillBaseEl.style.display = 'none';
+                    skillThumbEl.style.display = 'none';
+                }
+                if (type === 'sniper') sniperSpread = SNIPER_MAX_SPREAD;
+            }
+
+            canvas.addEventListener('pointerdown', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                const startX = 20, startY = 70, slotSize = 50, gap = 5;
+                for (let i = 0; i < 4; i++) {
+                    const slotX = startX + i * (slotSize + gap);
+                    if (mx >= slotX && mx <= slotX + slotSize && my >= startY && my <= startY + slotSize) {
+                        if (inventory[i] && inventory[i].name !== currentWeapon) equipWeapon(inventory[i].name);
                     }
                 }
-                if(hit){ playerBullets.splice(i,1); i--; continue; }
+            });
+
+            function checkPickupProximity() {
+                let near = false;
+                for (const item of floorItems) {
+                    if (item.active && Math.hypot(player.worldX - item.worldX, player.worldY - item.worldY) < 50) near = true;
+                }
+                pickupButton.style.display = near ? 'block' : 'none';
             }
-            for(let i=0;i<enemyBullets.length;i++){
-                let b=enemyBullets[i];
-                b.worldX+=b.vx*dt; b.worldY+=b.vy*dt;
-                let invul = dashActive || daggerDashActive || daggerSkillActive || spraySkillBack;
-                if(Math.hypot(b.worldX-player.worldX, b.worldY-player.worldY) < player.radius+5 && !invul){
-                    damagePlayer(b.dmg||8);
-                    enemyBullets.splice(i,1); i--;
+
+            // ========== Reload ==========
+            function startReload() {
+                if (isReloading || currentWeapon === 'dagger') return;
+                let state;
+                if (currentWeapon === 'spray') state = sprayState;
+                else state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
+                if (state.ammo >= state.maxAmmo || state.spare <= 0) return;
+                isReloading = true;
+                reloadTimer = state.reloadTime;
+            }
+            function finishReload() {
+                if (currentWeapon === 'spray') {
+                    const state = sprayState;
+                    if (state.spare > 0) {
+                        state.ammo = state.maxAmmo;
+                        state.spare--;
+                    }
+                } else {
+                    const state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
+                    const needed = state.maxAmmo - state.ammo;
+                    const take = Math.min(needed, state.spare);
+                    state.ammo += take;
+                    state.spare -= take;
+                }
+                isReloading = false;
+            }
+
+            // --- Collision with houses ---
+            function resolveHouseCollisions(entity) {
+                for (const house of houses) {
+                    for (const rect of house) {
+                        const closestX = Math.max(rect.x, Math.min(entity.worldX, rect.x + rect.w));
+                        const closestY = Math.max(rect.y, Math.min(entity.worldY, rect.y + rect.h));
+                        const dx = entity.worldX - closestX;
+                        const dy = entity.worldY - closestY;
+                        const dist = Math.hypot(dx, dy);
+                        if (dist < entity.radius) {
+                            const angle = Math.atan2(dy, dx);
+                            const overlap = entity.radius - dist;
+                            entity.worldX += Math.cos(angle) * overlap;
+                            entity.worldY += Math.sin(angle) * overlap;
+                        }
+                    }
                 }
             }
-        }
 
-        // drawing
-        function draw(){
-            ctx.clearRect(0,0,canvas.width,canvas.height);
-            ctx.save();
-            if(shakeTimer>0){ let s=screenShake; ctx.translate((Math.random()-0.5)*s,(Math.random()-0.5)*s); shakeTimer-=1/60; if(shakeTimer<=0) screenShake=0; }
-            let toScreen=(x,y)=>({ x:x+camX, y:y+camY });
-            for(let g of houses) for(let r of g){ let s=toScreen(r.x,r.y); ctx.fillStyle='#8B5A2B'; ctx.fillRect(s.x,s.y,r.w,r.h); ctx.strokeStyle='#5c3e1f'; ctx.strokeRect(s.x,s.y,r.w,r.h); }
-            for(let it of floorItems) if(it.active){ let s=toScreen(it.worldX,it.worldY); ctx.beginPath(); ctx.arc(s.x,s.y,14,0,Math.PI*2); ctx.fillStyle='#ffc107'; ctx.fill(); ctx.fillStyle='black'; ctx.font='20px monospace'; ctx.fillText(it.type==='pistol'?'🔫':(it.type==='shotgun'?'🖖':(it.type==='sniper'?'🔭':(it.type==='dagger'?'🗡️':'💥'))), s.x-8, s.y+6); }
-            for(let e of enemies){ let s=toScreen(e.worldX,e.worldY); ctx.fillStyle='#c22d2d'; ctx.beginPath(); ctx.arc(s.x,s.y,e.radius-2,0,Math.PI*2); ctx.fill(); ctx.fillStyle='white'; ctx.font='bold 9px monospace'; ctx.fillText(e.type, s.x-12, s.y-10); let maxHp = easyMode ? Math.floor((baseHealth[e.type]||30)*EASY_HP_FACTOR) : (baseHealth[e.type]||30); let hpPct = e.health/maxHp; ctx.fillStyle='#0f0'; ctx.fillRect(s.x-12, s.y-14, 24*hpPct, 4); }
-            for(let b of playerBullets){ let s=toScreen(b.worldX,b.worldY); ctx.fillStyle='#ffcc44'; ctx.beginPath(); ctx.arc(s.x,s.y,4,0,Math.PI*2); ctx.fill(); }
-            for(let b of enemyBullets){ let s=toScreen(b.worldX,b.worldY); ctx.fillStyle='#ff6666'; ctx.beginPath(); ctx.arc(s.x,s.y,4,0,Math.PI*2); ctx.fill(); }
-            let ps=toScreen(player.worldX,player.worldY); ctx.fillStyle='#F4A261'; ctx.beginPath(); ctx.arc(ps.x,ps.y,player.radius,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='#E76F51'; ctx.lineWidth=3; ctx.stroke(); ctx.fillStyle='white'; ctx.fillRect(ps.x-20, ps.y-24, 40*player.health/player.maxHealth, 6);
-            if(skillFlash>0){ ctx.fillStyle=`rgba(255,240,150,${skillFlash})`; ctx.fillRect(0,0,canvas.width,canvas.height); skillFlash-=0.03; }
-            ctx.restore();
-        }
-
-        // main loop
-        let lastTime = performance.now();
-        function gameLoop(now){
-            let dt = Math.min(0.033, (now - lastTime)/1000);
-            if(dt<=0){ requestAnimationFrame(gameLoop); lastTime=now; return; }
-            lastTime = now;
-            if(player.isDead){ draw(); requestAnimationFrame(gameLoop); return; }
-            updateRegen(dt);
-            waveTimer += dt;
-            if(waveTimer >= WAVE_INTERVAL && enemies.length < MAX_ENEMIES){ waveTimer=0; spawnWave(); }
-            if(dashActive){ dashTimer+=dt; if(dashTimer>=DASH_DUR){ dashActive=false; dashCooldown=DASH_CD; } }
-            if(dashCooldown>0){ dashCooldown-=dt; if(dashCooldown<0) dashCooldown=0; }
-            let dashBtn = document.getElementById('dashBtn');
-            if(dashCooldown>0 || dashActive) dashBtn.classList.add('disabled'); else dashBtn.classList.remove('disabled');
-
-            let moveSpeed = dashActive ? DASH_SPEED * Math.exp(-18*dashTimer) : player.baseSpeed;
-            let moveX = moveVec.x * moveSpeed + recoil.x;
-            let moveY = moveVec.y * moveSpeed + recoil.y;
-            if(!daggerDashActive && !daggerSkillActive && !spraySkillBack){
-                player.worldX += moveX * dt;
-                player.worldY += moveY * dt;
+            // --- Dagger basic dash ---
+            function triggerDaggerBasicDash() {
+                if (daggerDashing || daggerCooldown > 0 || currentWeapon !== 'dagger' || player.isDead) return;
+                const mag = Math.hypot(shootVec.x, shootVec.y);
+                if (mag === 0) return;
+                daggerDashDirection.x = shootVec.x / mag;
+                daggerDashDirection.y = shootVec.y / mag;
+                daggerDashSpeed = daggerState.dashDistance / daggerState.dashDuration;
+                daggerDashing = true;
+                daggerDashTimer = daggerState.dashDuration;
+                screenShake = 3; shakeDuration = 0.1;
             }
-            collideWithHouses(player);
-            recoil.x *= 0.92; recoil.y *= 0.92;
 
-            camX += (canvas.width/2 - player.worldX - camX) * 0.1;
-            camY += (canvas.height/2 - player.worldY - camY) * 0.1;
+            // --- Dagger long dash skill ---
+            function executeDaggerLongDashSkill() {
+                if (skillCooldown > 0 || daggerSkillDashActive || currentWeapon !== 'dagger' || player.isDead) return;
+                const dirX = skillVec.x, dirY = skillVec.y;
+                const mag = Math.hypot(dirX, dirY);
+                if (mag === 0) return;
+                daggerSkillDashDirection.x = dirX / mag;
+                daggerSkillDashDirection.y = dirY / mag;
+                daggerSkillDashSpeed = daggerSkillDashDistance / daggerSkillDashDuration;
+                daggerSkillDashActive = true;
+                daggerSkillDashTimer = daggerSkillDashDuration;
+                skillCooldown = skillCooldownDuration;
+                screenShake = 4; shakeDuration = 0.2;
+            }
 
-            if(isReloading){ reloadTimer-=dt; if(reloadTimer<=0){ isReloading=false; if(currentWeapon==='pistol') pistol.ammo = pistol.maxAmmo; else if(currentWeapon==='shotgun') shotgun.ammo = shotgun.maxAmmo; } }
+            // --- Spray skill ---
+            function executeSpraySkill() {
+                if (skillCooldown > 0 || spraySkillActive || currentWeapon !== 'spray' || player.isDead) return;
+                if (skillVec.x === 0 && skillVec.y === 0) return;
+                const aimDirX = skillVec.x, aimDirY = skillVec.y;
+                const mag = Math.hypot(aimDirX, aimDirY);
+                spraySkillAimDirX = aimDirX / mag;
+                spraySkillAimDirY = aimDirY / mag;
+                spraySkillDashBackward = true;
+                spraySkillDashTimer = spraySkillDashDuration;
+                spraySkillActive = true;
+                spraySkillBulletsLeft = spraySkillBulletCount;
+                spraySkillNextFireTime = performance.now() + 0.2;
+                skillCooldown = skillCooldownDuration;
+                screenShake = 8; shakeDuration = 0.3;
+                skillFlashAlpha = 0.5;
+            }
 
-            updateEnemies(dt, now/1000);
-            updateBullets(dt);
-            checkPickup();
-            draw();
+            // ========== Firing ==========
+            function firePistol(now, dirX, dirY) {
+                const state = pistolState;
+                if (isReloading || state.ammo <= 0 || player.isDead) { if (state.ammo === 0) startReload(); return false; }
+                if (now - lastFireTime < state.fireRate * 1000) return false;
+                if (dirX === 0 && dirY === 0) return false;
+                const mag = Math.hypot(dirX, dirY);
+                const vx = (dirX / mag) * state.bulletSpeed;
+                const vy = (dirY / mag) * state.bulletSpeed;
+                playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx, vy, radius: 5, damage: state.damage, isBeam: false, sourceWeapon: 'pistol' });
+                state.ammo--;
+                lastFireTime = now;
+                screenShake = 2; shakeDuration = 0.05;
+                if (state.ammo === 0) startReload();
+                return true;
+            }
+            function fireShotgun() {
+                const state = shotgunState;
+                if (isReloading || state.ammo <= 0 || player.isDead) { if (state.ammo === 0) startReload(); return; }
+                const mag = Math.hypot(shootVec.x, shootVec.y);
+                const dirX = shootVec.x / mag, dirY = shootVec.y / mag;
+                for (let i = 0; i < state.pellets; i++) {
+                    const angle = Math.atan2(dirY, dirX) + (Math.random()*2-1)*state.spreadAngle;
+                    const speed = state.bulletSpeed + (Math.random()*100-50);
+                    playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 3, damage: state.damage, isBeam: false, sourceWeapon: 'shotgun' });
+                }
+                state.ammo--;
+                recoilVelX = -dirX * state.recoilForce;
+                recoilVelY = -dirY * state.recoilForce;
+                screenShake = 5; shakeDuration = 0.1;
+                if (state.ammo === 0) startReload();
+            }
+            function fireSniper() {
+                const state = sniperState;
+                if (isReloading || state.ammo <= 0 || player.isDead) { if (state.ammo === 0) startReload(); return; }
+                const mag = Math.hypot(shootVec.x, shootVec.y);
+                const baseAngle = Math.atan2(shootVec.y, shootVec.x);
+                const fireAngle = baseAngle + sniperAimAngle;
+                const vx = Math.cos(fireAngle) * state.bulletSpeed;
+                const vy = Math.sin(fireAngle) * state.bulletSpeed;
+                playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx, vy, radius: 4, damage: state.damage, isBeam: true, sourceWeapon: 'sniper' });
+                state.ammo--;
+                recoilVelX = -Math.cos(fireAngle) * state.recoilForce;
+                recoilVelY = -Math.sin(fireAngle) * state.recoilForce;
+                screenShake = 18; shakeDuration = 0.3;
+                skillFlashAlpha = 0.4;
+                lastFireTime = performance.now();
+                if (state.ammo === 0) startReload();
+            }
+
+            function executeShotgunSkill() {
+                if (skillCooldown > 0 || player.isDead) return;
+                player.worldX = skillTargetWorld.x;
+                player.worldY = skillTargetWorld.y;
+                resolveHouseCollisions(player);
+                const bulletCount = 32;
+                for (let i = 0; i < bulletCount; i++) {
+                    const angle = (i / bulletCount) * Math.PI * 2;
+                    const speed = shotgunState.bulletSpeed;
+                    playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx: Math.cos(angle)*speed, vy: Math.sin(angle)*speed, radius: 4, damage: shotgunState.damage * 0.7, isBeam: false, sourceWeapon: 'shotgun' });
+                }
+                screenShake = 10; shakeDuration = 0.3;
+                skillFlashAlpha = 0.6;
+                skillCooldown = skillCooldownDuration;
+            }
+
+            function executeSniperSkill() {
+                if (skillCooldown > 0 || player.isDead) return;
+                const angle = Math.atan2(skillTargetWorld.y - player.worldY, skillTargetWorld.x - player.worldX);
+                const speed = 500;
+                grenades.push({
+                    worldX: player.worldX, worldY: player.worldY,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    targetX: skillTargetWorld.x, targetY: skillTargetWorld.y,
+                    radius: 6, active: true
+                });
+                skillCooldown = skillCooldownDuration;
+            }
+
+            // ========== Enemy spawning with global cap (max 8) ==========
+            function spawnWave() {
+                if (enemies.length >= MAX_ENEMIES_ALIVE) return;
+                waveNumber++;
+                let rawCount = Math.min(1 + Math.floor((waveNumber - 1) / 2), 6);
+                let slotsFree = MAX_ENEMIES_ALIVE - enemies.length;
+                let toSpawn = Math.min(rawCount, slotsFree);
+                for (let i = 0; i < toSpawn; i++) {
+                    const type = ENEMY_TYPES[Math.floor(Math.random() * ENEMY_TYPES.length)];
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = 400 + Math.random() * 300;
+                    const worldX = player.worldX + Math.cos(angle) * dist;
+                    const worldY = player.worldY + Math.sin(angle) * dist;
+                    let valid = true;
+                    for (const house of houses) {
+                        for (const rect of house) {
+                            if (worldX > rect.x - 20 && worldX < rect.x + rect.w + 20 && worldY > rect.y - 20 && worldY < rect.y + rect.h + 20) {
+                                valid = false; break;
+                            }
+                        }
+                        if (!valid) break;
+                    }
+                    if (!valid) continue;
+                    spawnEnemy(type, worldX, worldY);
+                }
+            }
+
+            function spawnEnemy(type, worldX, worldY) {
+                let enemy;
+                if (type === 'pistol') {
+                    enemy = {
+                        type: 'pistol', worldX, worldY, radius: 18, health: 40, speed: 120,
+                        fireRate: 0.6, lastFire: performance.now(), damage: pistolState.damage,
+                        visionRange: 400, drop: 'pistol'
+                    };
+                } else if (type === 'sword') {
+                    enemy = {
+                        type: 'sword', worldX, worldY, radius: 14, health: 60, speed: 160,
+                        meleeDamage: 25, meleeCooldown: 0.5, lastMelee: 0,
+                        dodging: false, dodgeTimer: 0, dodgeCooldown: 0, dodgeSpeed: 350,
+                        dodgeDirection: { x:0, y:0 }, hitFlash: 0,
+                        drop: 'dagger'
+                    };
+                } else if (type === 'spray') {
+                    enemy = {
+                        type: 'spray', worldX, worldY, radius: 16, health: 50, speed: 140,
+                        burstCooldown: 0.7, lastBurstTime: 0, burstCount: 3, burstFireRate: 0.07,
+                        burstBulletSpeed: 550, burstDamage: 4, dashAfterBurst: false, dashSpeed: 300, dashCooldown: 0,
+                        panicThreshold: 15, panicActive: false, panicMagRemaining: 30, panicFireRate: 0.04,
+                        panicSpread: 0.6, panicTriggerDist: 200, normalDist: 250,
+                        visionRange: 500, drop: 'spray'
+                    };
+                } else if (type === 'gang') {
+                    enemy = {
+                        type: 'gang', worldX, worldY, radius: 12, health: 20, speed: 130,
+                        meleeDamage: 15, meleeCooldown: 0.6, lastMelee: 0,
+                        drop: 'dagger'
+                    };
+                } else if (type === 'shotgun') {
+                    enemy = {
+                        type: 'shotgun', worldX, worldY, radius: 16, health: 50, speed: 140,
+                        fireCooldown: 0.9, lastFire: 0,
+                        bulletSpeed: 500, damage: 6, pellets: 5, spreadAngle: 0.3,
+                        preferredDist: 150,
+                        visionRange: 400, drop: 'shotgun'
+                    };
+                } else if (type === 'sniper') {
+                    enemy = {
+                        type: 'sniper', worldX, worldY, radius: 16, health: 30, speed: 100,
+                        fireCooldown: 1.2, lastFire: 0,
+                        bulletSpeed: 800, damage: 25,
+                        preferredDist: 350,
+                        visionRange: 600, drop: 'sniper'
+                    };
+                }
+                applyEasyModeHealth(enemy);
+                enemies.push(enemy);
+            }
+
+            function dropWeapon(type, worldX, worldY) {
+                floorItems.push({ worldX, worldY, radius: 15, active: true, type: type });
+            }
+
+            // --- Helper: line in smoke ---
+            function isLineInSmoke(x1, y1, x2, y2) {
+                for (const puff of smokeClouds) {
+                    if (puff.delay > 0 || puff.timer <= 0) continue;
+                    const cx = puff.worldX, cy = puff.worldY, r = puff.radius;
+                    const dx = x2 - x1, dy = y2 - y1;
+                    const fx = x1 - cx, fy = y1 - cy;
+                    const a = dx*dx + dy*dy;
+                    if (a === 0) continue;
+                    const b = 2*(fx*dx + fy*dy);
+                    const c = fx*fx + fy*fy - r*r;
+                    const discriminant = b*b - 4*a*c;
+                    if (discriminant >= 0) {
+                        const t1 = (-b - Math.sqrt(discriminant))/(2*a);
+                        const t2 = (-b + Math.sqrt(discriminant))/(2*a);
+                        if ((t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1) || (t1 < 0 && t2 > 1)) return true;
+                    }
+                }
+                return false;
+            }
+
+            // ========== Enemy AI (original, but updated to use easy mode health) ==========
+            function updateEnemies(now, dt) {
+                const gangMembers = enemies.filter(e => e.type === 'gang');
+                const gangAllAlive = gangMembers.length === 3;
+                const playerInvul = dashActive || daggerDashing || daggerSkillDashActive || spraySkillDashBackward;
+                for (const enemy of enemies) {
+                    const dx = player.worldX - enemy.worldX;
+                    const dy = player.worldY - enemy.worldY;
+                    const dist = Math.hypot(dx, dy);
+                    const canSeePlayer = !isLineInSmoke(enemy.worldX, enemy.worldY, player.worldX, player.worldY);
+
+                    if (enemy.type === 'pistol') {
+                        if (canSeePlayer) {
+                            const minDist = 150;
+                            if (dist > minDist + 5) {
+                                const angle = Math.atan2(dy, dx);
+                                enemy.worldX += Math.cos(angle) * enemy.speed * dt;
+                                enemy.worldY += Math.sin(angle) * enemy.speed * dt;
+                            }
+                            resolveHouseCollisions(enemy);
+                            if (dist < enemy.visionRange && now - enemy.lastFire > enemy.fireRate * 1000) {
+                                const a = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
+                                enemyBullets.push({
+                                    worldX: enemy.worldX, worldY: enemy.worldY,
+                                    vx: Math.cos(a) * pistolState.bulletSpeed,
+                                    vy: Math.sin(a) * pistolState.bulletSpeed,
+                                    radius: 4, damage: enemy.damage
+                                });
+                                enemy.lastFire = now;
+                            }
+                        }
+                    } else if (enemy.type === 'sword') {
+                        if (enemy.hitFlash > 0) enemy.hitFlash -= dt;
+                        if (!enemy.dodging && enemy.dodgeCooldown <= 0) {
+                            for (const b of playerBullets) {
+                                if (b.sourceWeapon === 'shotgun' || b.sourceWeapon === 'pistol') {
+                                    const bDist = Math.hypot(enemy.worldX - b.worldX, enemy.worldY - b.worldY);
+                                    if (bDist < enemy.radius * 4.5) {
+                                        enemy.dodging = true;
+                                        enemy.dodgeTimer = 0.25;
+                                        const perpX = -b.vy, perpY = b.vx;
+                                        const len = Math.hypot(perpX, perpY);
+                                        if (len > 0) {
+                                            const sign = Math.random() < 0.5 ? 1 : -1;
+                                            enemy.dodgeDirection.x = (perpX / len) * sign;
+                                            enemy.dodgeDirection.y = (perpY / len) * sign;
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        if (enemy.dodging) {
+                            enemy.dodgeTimer -= dt;
+                            if (enemy.dodgeTimer <= 0) { enemy.dodging = false; enemy.dodgeCooldown = 0.6; }
+                            else {
+                                enemy.worldX += enemy.dodgeDirection.x * enemy.dodgeSpeed * dt;
+                                enemy.worldY += enemy.dodgeDirection.y * enemy.dodgeSpeed * dt;
+                            }
+                        } else if (canSeePlayer) {
+                            if (dist > 10) {
+                                const angle = Math.atan2(dy, dx);
+                                enemy.worldX += Math.cos(angle) * enemy.speed * dt;
+                                enemy.worldY += Math.sin(angle) * enemy.speed * dt;
+                            }
+                        }
+                        if (enemy.dodgeCooldown > 0) enemy.dodgeCooldown -= dt;
+                        resolveHouseCollisions(enemy);
+                        if (!playerInvul && canSeePlayer && dist < player.radius + enemy.radius && !player.isDead && 
+                            now - (enemy.lastMelee || 0) > enemy.meleeCooldown * 1000) {
+                            player.health -= enemy.meleeDamage;
+                            enemy.lastMelee = now;
+                            enemy.hitFlash = 0.15;
+                            const angle = Math.atan2(dy, dx);
+                            recoilVelX -= Math.cos(angle) * 200;
+                            recoilVelY -= Math.sin(angle) * 200;
+                            lastDamageTime = performance.now() / 1000; // regen reset
+                            if (player.health <= 0) {
+                                player.health = 0;
+                                player.isDead = true;
+                                deathScreen.style.display = 'flex';
+                            }
+                        }
+                    } else if (enemy.type === 'spray') {
+                        if (enemy.panicActive) {
+                            if (enemy.panicMagRemaining > 0 && now - (enemy.lastBurstTime || 0) > enemy.panicFireRate * 1000) {
+                                const angle = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
+                                const spread = enemy.panicSpread;
+                                const a = angle + (Math.random()*2-1) * spread;
+                                enemyBullets.push({
+                                    worldX: enemy.worldX, worldY: enemy.worldY,
+                                    vx: Math.cos(a) * enemy.burstBulletSpeed,
+                                    vy: Math.sin(a) * enemy.burstBulletSpeed,
+                                    radius: 3, damage: enemy.burstDamage
+                                });
+                                enemy.panicMagRemaining--;
+                                enemy.lastBurstTime = now;
+                            }
+                            if (enemy.panicMagRemaining <= 0) {
+                                enemy.panicActive = false;
+                                enemy.lastBurstTime = now;
+                            }
+                        } else {
+                            if (canSeePlayer) {
+                                const preferredDist = enemy.normalDist;
+                                if (enemy.health <= enemy.panicThreshold && dist < enemy.panicTriggerDist) {
+                                    enemy.panicActive = true;
+                                    enemy.panicMagRemaining = 30;
+                                    enemy.lastBurstTime = 0;
+                                } else {
+                                    if (dist > preferredDist + 20) {
+                                        const angle = Math.atan2(dy, dx);
+                                        enemy.worldX += Math.cos(angle) * enemy.speed * dt;
+                                        enemy.worldY += Math.sin(angle) * enemy.speed * dt;
+                                    } else if (dist < preferredDist - 20) {
+                                        const angle = Math.atan2(-dy, -dx);
+                                        enemy.worldX += Math.cos(angle) * enemy.speed * dt;
+                                        enemy.worldY += Math.sin(angle) * enemy.speed * dt;
+                                    }
+                                    resolveHouseCollisions(enemy);
+                                    if (dist < enemy.visionRange && now - (enemy.lastBurstTime || 0) > enemy.burstCooldown * 1000) {
+                                        enemy.burstTimer = enemy.burstCount;
+                                        enemy.burstBulletsLeft = enemy.burstCount;
+                                        enemy.lastBurstTime = now;
+                                    }
+                                    if (enemy.burstBulletsLeft > 0 && now - enemy.lastBurstTime >= (enemy.burstCount - enemy.burstBulletsLeft) * enemy.burstFireRate * 1000) {
+                                        const angle = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
+                                        const spread = 0.1;
+                                        const a = angle + (Math.random()*2-1) * spread;
+                                        enemyBullets.push({
+                                            worldX: enemy.worldX, worldY: enemy.worldY,
+                                            vx: Math.cos(a) * enemy.burstBulletSpeed,
+                                            vy: Math.sin(a) * enemy.burstBulletSpeed,
+                                            radius: 3, damage: enemy.burstDamage
+                                        });
+                                        enemy.burstBulletsLeft--;
+                                    }
+                                }
+                            }
+                        }
+                    } else if (enemy.type === 'gang') {
+                        if (canSeePlayer) {
+                            if (dist > player.radius + enemy.radius + 5) {
+                                const angle = Math.atan2(dy, dx);
+                                enemy.worldX += Math.cos(angle) * enemy.speed * dt;
+                                enemy.worldY += Math.sin(angle) * enemy.speed * dt;
+                            }
+                            resolveHouseCollisions(enemy);
+                            if (!playerInvul && dist < player.radius + enemy.radius && !player.isDead &&
+                                now - (enemy.lastMelee || 0) > enemy.meleeCooldown * 1000) {
+                                const damage = gangAllAlive ? enemy.meleeDamage * 2 : enemy.meleeDamage;
+                                player.health -= damage;
+                                enemy.lastMelee = now;
+                                const angle = Math.atan2(dy, dx);
+                                recoilVelX -= Math.cos(angle) * 150;
+                                recoilVelY -= Math.sin(angle) * 150;
+                                lastDamageTime = performance.now() / 1000; // reset regen
+                                if (player.health <= 0) {
+                                    player.health = 0;
+                                    player.isDead = true;
+                                    deathScreen.style.display = 'flex';
+                                }
+                            }
+                        }
+                    } else if (enemy.type === 'shotgun') {
+                        if (canSeePlayer) {
+                            const preferredDist = enemy.preferredDist;
+                            if (dist > preferredDist + 20) {
+                                const angle = Math.atan2(dy, dx);
+                                enemy.worldX += Math.cos(angle) * enemy.speed * dt;
+                                enemy.worldY += Math.sin(angle) * enemy.speed * dt;
+                            } else if (dist < preferredDist - 20) {
+                                const angle = Math.atan2(-dy, -dx);
+                                enemy.worldX += Math.cos(angle) * enemy.speed * dt;
+                                enemy.worldY += Math.sin(angle) * enemy.speed * dt;
+                            }
+                            resolveHouseCollisions(enemy);
+                            if (dist < enemy.visionRange && now - (enemy.lastFire || 0) > enemy.fireCooldown * 1000) {
+                                const a = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
+                                for (let i = 0; i < enemy.pellets; i++) {
+                                    const angle = a + (Math.random()*2-1) * enemy.spreadAngle;
+                                    enemyBullets.push({
+                                        worldX: enemy.worldX, worldY: enemy.worldY,
+                                        vx: Math.cos(angle) * enemy.bulletSpeed,
+                                        vy: Math.sin(angle) * enemy.bulletSpeed,
+                                        radius: 3, damage: enemy.damage
+                                    });
+                                }
+                                enemy.lastFire = now;
+                            }
+                        }
+                    } else if (enemy.type === 'sniper') {
+                        if (canSeePlayer) {
+                            const preferredDist = enemy.preferredDist;
+                            if (dist < preferredDist - 30) {
+                                const angle = Math.atan2(-dy, -dx);
+                                enemy.worldX += Math.cos(angle) * enemy.speed * dt;
+                                enemy.worldY += Math.sin(angle) * enemy.speed * dt;
+                            } else if (dist > preferredDist + 30) {
+                                const angle = Math.atan2(dy, dx);
+                                enemy.worldX += Math.cos(angle) * enemy.speed * dt;
+                                enemy.worldY += Math.sin(angle) * enemy.speed * dt;
+                            }
+                            resolveHouseCollisions(enemy);
+                            if (dist < enemy.visionRange && now - (enemy.lastFire || 0) > enemy.fireCooldown * 1000) {
+                                const a = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
+                                enemyBullets.push({
+                                    worldX: enemy.worldX, worldY: enemy.worldY,
+                                    vx: Math.cos(a) * enemy.bulletSpeed,
+                                    vy: Math.sin(a) * enemy.bulletSpeed,
+                                    radius: 4, damage: enemy.damage
+                                });
+                                enemy.lastFire = now;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ========== Game loop with health regen integration ==========
+            let lastTime = performance.now();
+            function gameLoop(now) {
+                let dt = (now - lastTime) / 1000;
+                if (dt > 0.1) dt = 0.1;
+                lastTime = now;
+
+                if (player.isDead) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    requestAnimationFrame(gameLoop);
+                    return;
+                }
+
+                // Health regen
+                const nowSec = now / 1000;
+                const timeSinceDamage = nowSec - lastDamageTime;
+                if (timeSinceDamage >= REGEN_DELAY && player.health < player.maxHealth) {
+                    let heal = REGEN_RATE * dt;
+                    player.health = Math.min(player.maxHealth, player.health + heal);
+                    regenSpan.innerHTML = `❤️ REGEN: ACTIVE +${Math.floor(heal)}`;
+                } else if (timeSinceDamage < REGEN_DELAY) {
+                    regenSpan.innerHTML = `❤️ REGEN: WAIT ${(REGEN_DELAY - timeSinceDamage).toFixed(1)}s`;
+                } else {
+                    regenSpan.innerHTML = `❤️ REGEN: FULL`;
+                }
+
+                // Auto-spawn with cap
+                spawnTimer += dt;
+                if (spawnTimer >= SPAWN_INTERVAL) {
+                    spawnTimer = 0;
+                    spawnWave();
+                }
+
+                // Dash timers
+                if (dashActive) {
+                    dashTimer += dt;
+                    if (dashTimer >= dashDuration) { dashActive = false; cooldownTimer = dashCooldown; }
+                    updateDashUI();
+                }
+                if (cooldownTimer > 0) { cooldownTimer -= dt; if (cooldownTimer <= 0) { cooldownTimer = 0; updateDashUI(); } }
+                if (skillCooldown > 0) skillCooldown -= dt;
+                if (daggerCooldown > 0) daggerCooldown -= dt;
+
+                if (shakeDuration > 0) { shakeDuration -= dt; if (shakeDuration <= 0) screenShake = 0; }
+                if (skillFlashAlpha > 0) skillFlashAlpha -= dt * 2.5;
+
+                if (isReloading) { reloadTimer -= dt; if (reloadTimer <= 0) finishReload(); }
+
+                const moveActive = moveVec.x !== 0 || moveVec.y !== 0;
+                const decayRate = moveActive ? 0.8 : 3.0;
+                recoilVelX *= Math.exp(-decayRate * dt); recoilVelY *= Math.exp(-decayRate * dt);
+                if (Math.abs(recoilVelX) < 0.1) recoilVelX = 0;
+                if (Math.abs(recoilVelY) < 0.1) recoilVelY = 0;
+
+                const playerMoving = moveVec.x !== 0 || moveVec.y !== 0 || Math.abs(recoilVelX) > 5 || Math.abs(recoilVelY) > 5;
+                if (currentWeapon === 'sniper') {
+                    if (!playerMoving) sniperSpread = Math.max(SNIPER_MIN_SPREAD, sniperSpread - SNIPER_SPREAD_RECOVERY * dt);
+                    else sniperSpread = SNIPER_MAX_SPREAD;
+                    sniperAimAngle = Math.sin(now * 0.001 * SNIPER_OSCILLATION_SPEED) * (sniperSpread / 2);
+                }
+
+                // Dagger basic dash
+                if (daggerDashing) {
+                    daggerDashTimer -= dt;
+                    if (daggerDashTimer <= 0) {
+                        daggerDashing = false;
+                        daggerDashTimer = 0;
+                        daggerCooldown = daggerState.cooldown;
+                    } else {
+                        const moveX = daggerDashDirection.x * daggerDashSpeed * dt;
+                        const moveY = daggerDashDirection.y * daggerDashSpeed * dt;
+                        player.worldX += moveX;
+                        player.worldY += moveY;
+                        resolveHouseCollisions(player);
+                        for (let j = enemies.length - 1; j >= 0; j--) {
+                            const e = enemies[j];
+                            if (Math.hypot(player.worldX - e.worldX, player.worldY - e.worldY) < player.radius + e.radius) {
+                                e.health -= daggerState.damage;
+                                if (e.health <= 0) { dropWeapon(e.drop, e.worldX, e.worldY); enemies.splice(j, 1); }
+                            }
+                        }
+                    }
+                }
+
+                // Dagger long dash skill
+                if (daggerSkillDashActive) {
+                    daggerSkillDashTimer -= dt;
+                    if (daggerSkillDashTimer <= 0) {
+                        daggerSkillDashActive = false;
+                        daggerSkillDashTimer = 0;
+                        const dirX = daggerSkillDashDirection.x, dirY = daggerSkillDashDirection.y;
+                        const startDashX = player.worldX - dirX * daggerSkillDashDistance;
+                        const startDashY = player.worldY - dirY * daggerSkillDashDistance;
+                        const segmentDist = daggerSkillDashDistance / 4;
+                        daggerSkillExplosionQueue = [];
+                        for (let i = 0; i < 5; i++) {
+                            const distFromStart = i * segmentDist;
+                            const worldX = startDashX + dirX * distFromStart;
+                            const worldY = startDashY + dirY * distFromStart;
+                            const delay = 1.0 + i * 0.15;
+                            daggerSkillExplosionQueue.push({ worldX, worldY, delay, indicatorCreated: false });
+                        }
+                    } else {
+                        const moveX = daggerSkillDashDirection.x * daggerSkillDashSpeed * dt;
+                        const moveY = daggerSkillDashDirection.y * daggerSkillDashSpeed * dt;
+                        player.worldX += moveX;
+                        player.worldY += moveY;
+                        resolveHouseCollisions(player);
+                    }
+                }
+
+                // Process explosion queue
+                for (let i = daggerSkillExplosionQueue.length - 1; i >= 0; i--) {
+                    const exp = daggerSkillExplosionQueue[i];
+                    exp.delay -= dt;
+                    if (!exp.indicatorCreated && exp.delay <= 0.35 && exp.delay > 0) {
+                        exp.indicatorCreated = true;
+                        daggerSkillIndicators.push({ worldX: exp.worldX, worldY: exp.worldY, timer: exp.delay + 0.3 });
+                    }
+                    if (exp.delay <= 0) {
+                        daggerSkillExplosions.push({ worldX: exp.worldX, worldY: exp.worldY, radius: 10, maxRadius: 70, timer: 0.4 });
+                        for (let j = enemies.length - 1; j >= 0; j--) {
+                            const e = enemies[j];
+                            if (Math.hypot(exp.worldX - e.worldX, exp.worldY - e.worldY) < 70 + e.radius) {
+                                e.health -= 30;
+                                if (e.health <= 0) { dropWeapon(e.drop, e.worldX, e.worldY); enemies.splice(j, 1); }
+                            }
+                        }
+                        screenShake = 5; shakeDuration = 0.1;
+                        daggerSkillExplosionQueue.splice(i, 1);
+                    }
+                }
+                for (let i = daggerSkillIndicators.length - 1; i >= 0; i--) {
+                    daggerSkillIndicators[i].timer -= dt;
+                    if (daggerSkillIndicators[i].timer <= 0) daggerSkillIndicators.splice(i, 1);
+                }
+                for (let i = daggerSkillExplosions.length - 1; i >= 0; i--) {
+                    daggerSkillExplosions[i].timer -= dt;
+                    if (daggerSkillExplosions[i].timer <= 0) daggerSkillExplosions.splice(i, 1);
+                    else { const p = 1 - (daggerSkillExplosions[i].timer / 0.4); daggerSkillExplosions[i].radius = 10 + 60 * p; }
+                }
+
+                // Spray skill update
+                if (spraySkillActive) {
+                    if (spraySkillDashBackward) {
+                        spraySkillDashTimer -= dt;
+                        const dashSpeed = spraySkillDashDistance / spraySkillDashDuration;
+                        player.worldX += spraySkillAimDirX * -dashSpeed * dt;
+                        player.worldY += spraySkillAimDirY * -dashSpeed * dt;
+                        resolveHouseCollisions(player);
+                        if (spraySkillDashTimer <= 0) {
+                            spraySkillDashBackward = false;
+                            spraySkillDashTimer = 0;
+                            spraySkillNextFireTime = performance.now() + 0.1;
+                        }
+                    } else {
+                        if (spraySkillBulletsLeft > 0 && now >= spraySkillNextFireTime) {
+                            const spread = spraySkillSpread;
+                            const baseAngle = Math.atan2(spraySkillAimDirY, spraySkillAimDirX);
+                            const angle = baseAngle + (Math.random()*2-1) * spread;
+                            const speed = sprayState.bulletSpeed;
+                            playerBullets.push({
+                                worldX: player.worldX, worldY: player.worldY,
+                                vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+                                radius: 3, damage: sprayState.damage, isBeam: false, sourceWeapon: 'spray'
+                            });
+                            spraySkillBulletsLeft--;
+                            spraySkillNextFireTime = now + spraySkillFireRate * 1000;
+                        }
+                        if (spraySkillBulletsLeft <= 0) spraySkillActive = false;
+                    }
+                }
+
+                // Normal movement (skip if dashing)
+                if (!daggerDashing && !daggerSkillDashActive && !spraySkillDashBackward) {
+                    let worldMoveVelX = moveVec.x * player.baseSpeed + recoilVelX;
+                    let worldMoveVelY = moveVec.y * player.baseSpeed + recoilVelY;
+                    if (dashActive) {
+                        const dashMag = maxDashSpeed * Math.exp(-dashDecayRate * dashTimer);
+                        worldMoveVelX += dashDirection.x * dashMag;
+                        worldMoveVelY += dashDirection.y * dashMag;
+                    }
+                    player.worldX += worldMoveVelX * dt;
+                    player.worldY += worldMoveVelY * dt;
+                    resolveHouseCollisions(player);
+                }
+
+                // Camera centering
+                const centerX = canvas.width / 2, centerY = canvas.height / 2;
+                const screenX = player.worldX + cameraOffsetX;
+                const screenY = player.worldY + cameraOffsetY;
+                cameraOffsetX -= (screenX - centerX) * CAMERA_FOLLOW_SPEED * dt;
+                cameraOffsetY -= (screenY - centerY) * CAMERA_FOLLOW_SPEED * dt;
+
+                // Grenades (smoke)
+                for (let i = grenades.length - 1; i >= 0; i--) {
+                    const g = grenades[i];
+                    g.worldX += g.vx * dt; g.worldY += g.vy * dt;
+                    const toTargetX = g.targetX - g.worldX, toTargetY = g.targetY - g.worldY;
+                    const dist = Math.hypot(toTargetX, toTargetY);
+                    const moveX = g.vx, moveY = g.vy;
+                    if (dist < 25 || (moveX * toTargetX + moveY * toTargetY) <= 0) {
+                        const puffCount = 18, maxSpread = 50;
+                        for (let j = 0; j < puffCount; j++) {
+                            const angle = Math.random() * Math.PI * 2, offset = Math.random() * maxSpread;
+                            smokeClouds.push({
+                                worldX: g.targetX + Math.cos(angle) * offset,
+                                worldY: g.targetY + Math.sin(angle) * offset,
+                                radius: 65 + Math.random() * 40, timer: 5.0, delay: Math.random() * 0.2
+                            });
+                        }
+                        skillFlashAlpha = 0.3;
+                        screenShake = 3; shakeDuration = 0.1;
+                        grenades.splice(i, 1);
+                    }
+                }
+                for (const puff of smokeClouds) {
+                    if (puff.delay > 0) { puff.delay -= dt; continue; }
+                    puff.timer -= dt;
+                }
+                for (let i = smokeClouds.length - 1; i >= 0; i--) {
+                    if (smokeClouds[i].delay <= 0 && smokeClouds[i].timer <= 0) smokeClouds.splice(i, 1);
+                }
+
+                // Spray regular burst fire
+                if (currentWeapon === 'spray' && shootActive && !spraySkillActive && !isReloading) {
+                    const state = sprayState;
+                    if (sprayBurstBulletsLeft > 0) {
+                        if (now - sprayBurstTimer >= (state.burstCount - sprayBurstBulletsLeft) * state.burstFireRate * 1000) {
+                            const mag = Math.hypot(shootVec.x, shootVec.y);
+                            if (mag > 0) {
+                                const baseAngle = Math.atan2(shootVec.y, shootVec.x);
+                                const angle = baseAngle + (Math.random()*2-1) * state.spread;
+                                playerBullets.push({
+                                    worldX: player.worldX, worldY: player.worldY,
+                                    vx: Math.cos(angle) * state.bulletSpeed, vy: Math.sin(angle) * state.bulletSpeed,
+                                    radius: 3, damage: state.damage, isBeam: false, sourceWeapon: 'spray'
+                                });
+                                state.ammo--;
+                                screenShake = 1; shakeDuration = 0.03;
+                                if (state.ammo <= 0) startReload();
+                            }
+                            sprayBurstBulletsLeft--;
+                            if (sprayBurstBulletsLeft === 0) sprayNextBurstTime = now + state.burstCooldown * 1000;
+                        }
+                    } else if (now >= sprayNextBurstTime && state.ammo > 0) {
+                        fireSprayBurst(now);
+                    }
+                }
+                function fireSprayBurst(now) {
+                    const state = sprayState;
+                    if (isReloading || state.ammo <= 0 || player.isDead) return;
+                    if (now < sprayNextBurstTime) return;
+                    if (shootVec.x === 0 && shootVec.y === 0) return;
+                    sprayBurstBulletsLeft = state.burstCount;
+                    sprayBurstTimer = now;
+                    sprayNextBurstTime = now + state.burstCooldown * 1000;
+                }
+
+                // Pistol auto-fire with aim assist
+                if (currentWeapon === 'pistol' && shootActive && !daggerDashing && !daggerSkillDashActive && !spraySkillDashBackward) {
+                    let aimDirX = shootVec.x, aimDirY = shootVec.y;
+                    if (aimDirX !== 0 || aimDirY !== 0) {
+                        const rawAngle = Math.atan2(aimDirY, aimDirX);
+                        let bestEnemy = null;
+                        let bestAngleDiff = Infinity;
+                        const aimAssistAngle = Math.PI / 12;
+                        const aimAssistRange = 350;
+                        for (const enemy of enemies) {
+                            const dx = enemy.worldX - player.worldX;
+                            const dy = enemy.worldY - player.worldY;
+                            const dist = Math.hypot(dx, dy);
+                            if (dist > aimAssistRange) continue;
+                            const angleToEnemy = Math.atan2(dy, dx);
+                            let angleDiff = Math.abs(angleToEnemy - rawAngle);
+                            if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+                            if (angleDiff < aimAssistAngle && angleDiff < bestAngleDiff) {
+                                bestAngleDiff = angleDiff;
+                                bestEnemy = enemy;
+                            }
+                        }
+                        if (bestEnemy) {
+                            aimDirX = bestEnemy.worldX - player.worldX;
+                            aimDirY = bestEnemy.worldY - player.worldY;
+                            const mag = Math.hypot(aimDirX, aimDirY);
+                            aimDirX /= mag;
+                            aimDirY /= mag;
+                        }
+                    }
+                    firePistol(now, aimDirX, aimDirY);
+                }
+
+                updateEnemies(now, dt);
+
+                // Player bullets collisions
+                for (let i = playerBullets.length - 1; i >= 0; i--) {
+                    const b = playerBullets[i];
+                    b.worldX += b.vx * dt; b.worldY += b.vy * dt;
+                    let remove = false;
+                    for (const house of houses) {
+                        for (const rect of house) {
+                            if (b.worldX > rect.x - b.radius && b.worldX < rect.x + rect.w + b.radius &&
+                                b.worldY > rect.y - b.radius && b.worldY < rect.y + rect.h + b.radius) { remove = true; break; }
+                        }
+                        if (remove) break;
+                    }
+                    if (remove) { playerBullets.splice(i, 1); continue; }
+                    let hit = false;
+                    for (let j = enemies.length - 1; j >= 0; j--) {
+                        const e = enemies[j];
+                        if (Math.hypot(b.worldX - e.worldX, b.worldY - e.worldY) < e.radius + b.radius) {
+                            e.health -= b.damage;
+                            if (e.health <= 0) {
+                                dropWeapon(e.drop, e.worldX, e.worldY);
+                                enemies.splice(j, 1);
+                            }
+                            hit = true; break;
+                        }
+                    }
+                    if (hit) { playerBullets.splice(i, 1); continue; }
+                }
+
+                // Enemy bullets vs player (invulnerable check)
+                const playerInvul = dashActive || daggerDashing || daggerSkillDashActive || spraySkillDashBackward;
+                if (!playerInvul) {
+                    for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                        const b = enemyBullets[i];
+                        b.worldX += b.vx * dt; b.worldY += b.vy * dt;
+                        let remove = false;
+                        for (const house of houses) {
+                            for (const rect of house) {
+                                if (b.worldX > rect.x - b.radius && b.worldX < rect.x + rect.w + b.radius &&
+                                    b.worldY > rect.y - b.radius && b.worldY < rect.y + rect.h + b.radius) { remove = true; break; }
+                            }
+                            if (remove) break;
+                        }
+                        if (remove) { enemyBullets.splice(i, 1); continue; }
+                        if (Math.hypot(b.worldX - player.worldX, b.worldY - player.worldY) < player.radius + b.radius) {
+                            player.health -= b.damage;
+                            enemyBullets.splice(i, 1);
+                            lastDamageTime = now / 1000; // reset regen timer
+                            if (player.health <= 0) { player.health = 0; player.isDead = true; deathScreen.style.display = 'flex'; }
+                        }
+                    }
+                } else {
+                    for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                        const b = enemyBullets[i];
+                        b.worldX += b.vx * dt; b.worldY += b.vy * dt;
+                        let remove = false;
+                        for (const house of houses) {
+                            for (const rect of house) {
+                                if (b.worldX > rect.x - b.radius && b.worldX < rect.x + rect.w + b.radius &&
+                                    b.worldY > rect.y - b.radius && b.worldY < rect.y + rect.h + b.radius) { remove = true; break; }
+                            }
+                            if (remove) break;
+                        }
+                        if (remove) enemyBullets.splice(i, 1);
+                    }
+                }
+
+                checkPickupProximity();
+
+                // --- Draw (exact same as original) ---
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.save();
+
+                if (currentWeapon === 'sniper' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) {
+                    const playerScreen = { x: player.worldX + cameraOffsetX, y: player.worldY + cameraOffsetY };
+                    ctx.translate(playerScreen.x, playerScreen.y);
+                    ctx.scale(0.65, 0.65);
+                    ctx.translate(-playerScreen.x, -playerScreen.y);
+                }
+
+                if (screenShake > 0) {
+                    const shakeX = (Math.random()*2-1)*screenShake;
+                    const shakeY = (Math.random()*2-1)*screenShake;
+                    ctx.translate(shakeX, shakeY);
+                }
+
+                function toScreen(wx, wy) { return { x: wx + cameraOffsetX, y: wy + cameraOffsetY }; }
+
+                // Houses
+                for (const house of houses) {
+                    for (const rect of house) {
+                        const s = toScreen(rect.x, rect.y);
+                        ctx.fillStyle = '#8B5A2B';
+                        ctx.fillRect(s.x, s.y, rect.w, rect.h);
+                        ctx.strokeStyle = '#5C4033'; ctx.lineWidth = 2;
+                        ctx.strokeRect(s.x, s.y, rect.w, rect.h);
+                    }
+                }
+
+                // Smoke
+                for (const puff of smokeClouds) {
+                    if (puff.delay > 0 || puff.timer <= 0) continue;
+                    const s = toScreen(puff.worldX, puff.worldY);
+                    const alpha = Math.min(1.0, puff.timer / 1.0) * 0.35;
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = '#808080';
+                    ctx.beginPath(); ctx.arc(s.x, s.y, puff.radius, 0, Math.PI*2); ctx.fill();
+                }
+                ctx.globalAlpha = 1.0;
+
+                // Grenades
+                for (const g of grenades) {
+                    const s = toScreen(g.worldX, g.worldY);
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(s.x - 4, s.y - 4, 8, 8);
+                    ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+                    ctx.strokeRect(s.x - 4, s.y - 4, 8, 8);
+                }
+
+                // Dagger indicators & explosions
+                for (const ind of daggerSkillIndicators) {
+                    const s = toScreen(ind.worldX, ind.worldY);
+                    const progress = 1 - (ind.timer / 0.65);
+                    const radius = 10 + progress * 30;
+                    const alpha = Math.max(0, ind.timer * 2);
+                    ctx.globalAlpha = alpha * 0.6;
+                    ctx.strokeStyle = '#ff3300'; ctx.lineWidth = 3;
+                    ctx.beginPath(); ctx.arc(s.x, s.y, radius, 0, Math.PI*2); ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+                for (const exp of daggerSkillExplosions) {
+                    const s = toScreen(exp.worldX, exp.worldY);
+                    const alpha = exp.timer / 0.4;
+                    ctx.globalAlpha = alpha * 0.7;
+                    ctx.fillStyle = '#ff6600';
+                    ctx.beginPath(); ctx.arc(s.x, s.y, exp.radius, 0, Math.PI*2); ctx.fill();
+                    ctx.globalAlpha = 1;
+                    ctx.strokeStyle = '#ffaa00'; ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                // Spray skill fan
+                if (currentWeapon === 'spray' && skillActive && (skillVec.x !== 0 || skillVec.y !== 0) && skillCooldown <= 0) {
+                    const pScreen = toScreen(player.worldX, player.worldY);
+                    const baseAngle = Math.atan2(skillVec.y, skillVec.x);
+                    const halfSpread = spraySkillSpread;
+                    const fanLength = 120;
+                    ctx.save();
+                    ctx.globalAlpha = 0.25; ctx.fillStyle = '#ff00ff';
+                    ctx.beginPath(); ctx.moveTo(pScreen.x, pScreen.y);
+                    ctx.arc(pScreen.x, pScreen.y, fanLength, baseAngle - halfSpread, baseAngle + halfSpread);
+                    ctx.closePath(); ctx.fill();
+                    ctx.globalAlpha = 1;
+                    ctx.strokeStyle = '#ff00ff'; ctx.lineWidth = 2; ctx.stroke();
+                    const dashDirX = -Math.cos(baseAngle), dashDirY = -Math.sin(baseAngle);
+                    const dashEndX = pScreen.x + dashDirX * spraySkillDashDistance;
+                    const dashEndY = pScreen.y + dashDirY * spraySkillDashDistance;
+                    ctx.beginPath(); ctx.moveTo(pScreen.x, pScreen.y); ctx.lineTo(dashEndX, dashEndY);
+                    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+                    ctx.setLineDash([5,5]); ctx.stroke(); ctx.setLineDash([]);
+                    ctx.restore();
+                }
+
+                // Sniper fan
+                if (currentWeapon === 'sniper' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0) && !isReloading) {
+                    const baseAngle = Math.atan2(shootVec.y, shootVec.x);
+                    const fanLength = 1500;
+                    const pScreen = toScreen(player.worldX, player.worldY);
+                    ctx.save();
+                    ctx.globalAlpha = 0.2; ctx.fillStyle = '#00ffff';
+                    ctx.beginPath(); ctx.moveTo(pScreen.x, pScreen.y);
+                    ctx.arc(pScreen.x, pScreen.y, fanLength, baseAngle - sniperSpread/2, baseAngle + sniperSpread/2);
+                    ctx.closePath(); ctx.fill();
+                    ctx.globalAlpha = 1;
+                    ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 1; ctx.stroke();
+                    const aimAngle = baseAngle + sniperAimAngle;
+                    const endX = pScreen.x + Math.cos(aimAngle) * fanLength;
+                    const endY = pScreen.y + Math.sin(aimAngle) * fanLength;
+                    ctx.beginPath(); ctx.moveTo(pScreen.x, pScreen.y); ctx.lineTo(endX, endY);
+                    ctx.strokeStyle = 'white'; ctx.lineWidth = 1.5;
+                    ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
+                    ctx.restore();
+                }
+
+                // Shotgun aim fan
+                if (currentWeapon === 'shotgun' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0) && !isReloading) {
+                    const aimAngle = Math.atan2(shootVec.y, shootVec.x);
+                    const halfSpread = shotgunState.spreadAngle;
+                    const pScreen = toScreen(player.worldX, player.worldY);
+                    ctx.save(); ctx.globalAlpha = 0.25; ctx.fillStyle = '#ffaa00';
+                    ctx.beginPath(); ctx.moveTo(pScreen.x, pScreen.y);
+                    ctx.arc(pScreen.x, pScreen.y, 80, aimAngle - halfSpread, aimAngle + halfSpread);
+                    ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1; ctx.restore();
+                }
+
+                // Dagger aim indicator
+                if (currentWeapon === 'dagger' && shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) {
+                    const pScreen = toScreen(player.worldX, player.worldY);
+                    const endX = pScreen.x + shootVec.x * daggerState.dashDistance;
+                    const endY = pScreen.y + shootVec.y * daggerState.dashDistance;
+                    ctx.beginPath(); ctx.moveTo(pScreen.x, pScreen.y); ctx.lineTo(endX, endY);
+                    ctx.strokeStyle = '#ff9999'; ctx.lineWidth = 2;
+                    ctx.setLineDash([4,4]); ctx.stroke(); ctx.setLineDash([]);
+                }
+
+                // Skill aim preview (shotgun, sniper, dagger)
+                if (skillActive && (skillVec.x !== 0 || skillVec.y !== 0) && currentWeapon !== 'spray') {
+                    const targetScreen = toScreen(skillTargetWorld.x, skillTargetWorld.y);
+                    const playerScreen = toScreen(player.worldX, player.worldY);
+                    ctx.beginPath();
+                    ctx.arc(targetScreen.x, targetScreen.y, 10, 0, Math.PI*2);
+                    ctx.fillStyle = currentWeapon === 'sniper' ? '#808080' : (currentWeapon === 'dagger' ? '#ff6666' : '#00bfff');
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(playerScreen.x, playerScreen.y); ctx.lineTo(targetScreen.x, targetScreen.y);
+                    ctx.strokeStyle = currentWeapon === 'sniper' ? '#808080' : (currentWeapon === 'dagger' ? '#ff6666' : '#00bfff');
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5,5]); ctx.stroke(); ctx.setLineDash([]);
+                }
+
+                // Floor items
+                for (const item of floorItems) {
+                    if (item.active) {
+                        const s = toScreen(item.worldX, item.worldY);
+                        ctx.beginPath(); ctx.arc(s.x, s.y, item.radius, 0, Math.PI*2);
+                        ctx.fillStyle = '#ffc107'; ctx.fill();
+                        ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
+                        ctx.fillStyle = '#000'; ctx.font = '18px monospace'; ctx.textAlign = 'center';
+                        ctx.fillText(item.type === 'pistol' ? '🔫' : (item.type === 'shotgun' ? '🖖' : (item.type === 'sniper' ? '🔭' : (item.type === 'dagger' ? '🗡️' : '💥'))), s.x, s.y+6);
+                        ctx.textAlign = 'start';
+                    }
+                }
+
+                // Enemies
+                for (const enemy of enemies) {
+                    const s = toScreen(enemy.worldX, enemy.worldY);
+                    ctx.beginPath(); ctx.arc(s.x, s.y, enemy.radius, 0, Math.PI*2);
+                    if (enemy.type === 'pistol') { ctx.fillStyle = '#d32f2f'; ctx.strokeStyle = '#b71c1c'; }
+                    else if (enemy.type === 'sword') { ctx.fillStyle = enemy.hitFlash > 0 ? '#ff0000' : '#ff9800'; ctx.strokeStyle = '#e65100'; }
+                    else if (enemy.type === 'spray') { ctx.fillStyle = enemy.panicActive ? '#ff4081' : '#00bcd4'; ctx.strokeStyle = '#006064'; }
+                    else if (enemy.type === 'gang') { ctx.fillStyle = '#4caf50'; ctx.strokeStyle = '#1b5e20'; }
+                    else if (enemy.type === 'shotgun') { ctx.fillStyle = '#e91e63'; ctx.strokeStyle = '#880e4f'; }
+                    else if (enemy.type === 'sniper') { ctx.fillStyle = '#9c27b0'; ctx.strokeStyle = '#4a148c'; }
+                    ctx.fill(); ctx.lineWidth = 2; ctx.stroke();
+                    if (enemy.type === 'sword') {
+                        const angleToPlayer = Math.atan2(player.worldY - enemy.worldY, player.worldX - enemy.worldX);
+                        const swordLength = enemy.radius + 6;
+                        const swordEndX = s.x + Math.cos(angleToPlayer) * swordLength;
+                        const swordEndY = s.y + Math.sin(angleToPlayer) * swordLength;
+                        ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(swordEndX, swordEndY);
+                        ctx.strokeStyle = '#cccccc'; ctx.lineWidth = 3; ctx.stroke();
+                        const perpX = -Math.sin(angleToPlayer), perpY = Math.cos(angleToPlayer);
+                        ctx.beginPath();
+                        ctx.moveTo(s.x + perpX*5, s.y + perpY*5); ctx.lineTo(s.x - perpX*5, s.y - perpY*5);
+                        ctx.strokeStyle = '#999999'; ctx.lineWidth = 2; ctx.stroke();
+                        if (enemy.hitFlash > 0) {
+                            ctx.save(); ctx.globalAlpha = enemy.hitFlash * 2;
+                            ctx.beginPath(); ctx.arc(s.x, s.y, enemy.radius + 8, angleToPlayer - 0.5, angleToPlayer + 0.5);
+                            ctx.strokeStyle = '#ff4444'; ctx.lineWidth = 3; ctx.stroke();
+                            ctx.restore();
+                        }
+                    }
+                    const eBarW = enemy.radius*2, eBarH = 4;
+                    const maxHp = easyMode ? Math.floor((BASE_ENEMY_HEALTH[enemy.type]||30)*0.4) : (BASE_ENEMY_HEALTH[enemy.type]||30);
+                    const eHpPct = enemy.health / maxHp;
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(s.x - eBarW/2 -1, s.y - enemy.radius -8 -1, eBarW+2, eBarH+2);
+                    ctx.fillStyle = eHpPct > 0.5 ? '#4caf50' : '#ff7043';
+                    ctx.fillRect(s.x - eBarW/2, s.y - enemy.radius -8, eBarW * eHpPct, eBarH);
+                }
+
+                // Bullets
+                for (const b of playerBullets) {
+                    const s = toScreen(b.worldX, b.worldY);
+                    if (b.isBeam) {
+                        const angle = Math.atan2(b.vy, b.vx);
+                        const beamLength = 40;
+                        const startX = s.x - Math.cos(angle) * beamLength;
+                        const startY = s.y - Math.sin(angle) * beamLength;
+                        ctx.beginPath(); ctx.moveTo(startX, startY); ctx.lineTo(s.x, s.y);
+                        ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 4;
+                        ctx.shadowBlur = 8; ctx.shadowColor = '#00ffff';
+                        ctx.stroke(); ctx.shadowBlur = 0;
+                    } else {
+                        ctx.beginPath(); ctx.arc(s.x, s.y, b.radius, 0, Math.PI*2);
+                        ctx.fillStyle = b.sourceWeapon === 'shotgun' ? '#ffaa00' : (b.sourceWeapon === 'spray' ? '#ff00ff' : '#ffdd55');
+                        ctx.fill();
+                    }
+                }
+                ctx.fillStyle = '#ff5252';
+                enemyBullets.forEach(b => {
+                    const s = toScreen(b.worldX, b.worldY);
+                    ctx.beginPath(); ctx.arc(s.x, s.y, b.radius, 0, Math.PI*2); ctx.fill();
+                });
+
+                // Player with weapon visual
+                const playerScreen = toScreen(player.worldX, player.worldY);
+                let weaponAngle = 0;
+                if (shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) weaponAngle = Math.atan2(shootVec.y, shootVec.x);
+                else if (moveVec.x !== 0 || moveVec.y !== 0) weaponAngle = Math.atan2(moveVec.y, moveVec.x);
+                ctx.beginPath(); ctx.arc(playerScreen.x, playerScreen.y, player.radius, 0, Math.PI*2);
+                ctx.fillStyle = dashActive ? '#e63946' : (playerInvul ? '#aaa' : '#F4A261');
+                ctx.fill();
+                ctx.strokeStyle = dashActive ? '#fff' : '#E76F51'; ctx.lineWidth = 3; ctx.stroke();
+                if (currentWeapon === 'sniper') {
+                    const gunLength = 25;
+                    const gunEndX = playerScreen.x + Math.cos(weaponAngle) * gunLength;
+                    const gunEndY = playerScreen.y + Math.sin(weaponAngle) * gunLength;
+                    ctx.beginPath(); ctx.moveTo(playerScreen.x, playerScreen.y); ctx.lineTo(gunEndX, gunEndY);
+                    ctx.strokeStyle = '#444'; ctx.lineWidth = 5; ctx.stroke();
+                    ctx.beginPath(); ctx.arc(gunEndX, gunEndY, 4, 0, Math.PI*2);
+                    ctx.fillStyle = '#333'; ctx.fill();
+                } else if (currentWeapon === 'dagger') {
+                    const bladeLength = 14;
+                    const endX = playerScreen.x + Math.cos(weaponAngle) * bladeLength;
+                    const endY = playerScreen.y + Math.sin(weaponAngle) * bladeLength;
+                    ctx.beginPath(); ctx.moveTo(playerScreen.x, playerScreen.y); ctx.lineTo(endX, endY);
+                    ctx.strokeStyle = '#C0C0C0'; ctx.lineWidth = 4; ctx.stroke();
+                    const perpX = -Math.sin(weaponAngle), perpY = Math.cos(weaponAngle);
+                    ctx.beginPath();
+                    ctx.moveTo(playerScreen.x + perpX*4, playerScreen.y + perpY*4);
+                    ctx.lineTo(playerScreen.x - perpX*4, playerScreen.y - perpY*4);
+                    ctx.strokeStyle = '#888'; ctx.lineWidth = 2; ctx.stroke();
+                } else if (currentWeapon === 'spray') {
+                    const gunLength = 20;
+                    const endX = playerScreen.x + Math.cos(weaponAngle) * gunLength;
+                    const endY = playerScreen.y + Math.sin(weaponAngle) * gunLength;
+                    ctx.beginPath(); ctx.moveTo(playerScreen.x, playerScreen.y); ctx.lineTo(endX, endY);
+                    ctx.strokeStyle = '#333'; ctx.lineWidth = 5; ctx.stroke();
+                    ctx.fillStyle = '#666';
+                    ctx.fillRect(endX - 4, endY - 4, 8, 8);
+                }
+
+                const pBarW = player.radius*2, pBarH = 5;
+                const pHpPct = player.health / player.maxHealth;
+                ctx.fillStyle = '#333';
+                ctx.fillRect(playerScreen.x - pBarW/2 -1, playerScreen.y - player.radius -14 -1, pBarW+2, pBarH+2);
+                ctx.fillStyle = '#00e676';
+                ctx.fillRect(playerScreen.x - pBarW/2, playerScreen.y - player.radius -14, pBarW * pHpPct, pBarH);
+
+                if (skillFlashAlpha > 0) {
+                    ctx.fillStyle = `rgba(255,255,255,${skillFlashAlpha})`;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                }
+
+                ctx.restore();
+
+                // UI
+                const totalSpeed = Math.hypot(moveVec.x * player.baseSpeed + recoilVelX, moveVec.y * player.baseSpeed + recoilVelY);
+                let speedText = `Speed: ${Math.round(totalSpeed)} px/s`;
+                if (dashActive) speedText += ' (DASH!)';
+                if (daggerDashing || daggerSkillDashActive || spraySkillDashBackward) speedText += ' (LUNGE)';
+                if (Math.abs(recoilVelX) > 0.5 || Math.abs(recoilVelY) > 0.5) speedText += ' (recoil)';
+                ctx.font = 'bold 16px monospace'; ctx.fillStyle = 'white';
+                ctx.shadowColor = 'black'; ctx.shadowBlur = 4;
+                ctx.fillText(speedText, 20, 40);
+                ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+
+                if (currentWeapon) {
+                    let ammoText = '';
+                    if (currentWeapon === 'dagger') {
+                        ammoText = `Dagger (basic ${daggerCooldown > 0 ? 'CD '+Math.ceil(daggerCooldown) : 'ready'}, skill ${skillCooldown > 0 ? 'CD '+Math.ceil(skillCooldown) : 'ready'})`;
+                    } else if (currentWeapon === 'spray') {
+                        ammoText = `Spray: ${sprayState.ammo}/${sprayState.maxAmmo} | mags: ${sprayState.spare}`;
+                        if (isReloading) ammoText += ' RELOADING...';
+                        ammoText += ` (skill ${skillCooldown > 0 ? 'CD '+Math.ceil(skillCooldown) : 'ready'})`;
+                    } else {
+                        const state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
+                        ammoText = `${currentWeapon}: ${state.ammo}/${state.maxAmmo} | spares: ${state.spare}`;
+                        if (isReloading) ammoText += ' RELOADING...';
+                    }
+                    ctx.font = 'bold 16px monospace'; ctx.fillStyle = '#ffc107';
+                    ctx.shadowColor = 'black'; ctx.shadowBlur = 4;
+                    ctx.textAlign = 'right';
+                    ctx.fillText(ammoText, canvas.width - 30, canvas.height - 80);
+                    ctx.textAlign = 'start';
+                    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+                }
+
+                // Inventory
+                const startX = 20, startY = 70, slotSize = 50, gap = 5;
+                ctx.strokeStyle = 'white'; ctx.lineWidth = 2;
+                for (let i = 0; i < 4; i++) {
+                    const x = startX + i * (slotSize + gap);
+                    if (inventory[i] && inventory[i].name === currentWeapon) {
+                        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                        ctx.fillRect(x, startY, slotSize, slotSize);
+                    }
+                    ctx.strokeRect(x, startY, slotSize, slotSize);
+                    if (inventory[i]) {
+                        ctx.font = '24px sans-serif'; ctx.fillStyle = 'white'; ctx.textAlign = 'center';
+                        ctx.fillText(inventory[i].icon, x + slotSize/2, startY + slotSize/2 + 8);
+                        ctx.textAlign = 'start';
+                    }
+                }
+                ctx.font = '12px sans-serif'; ctx.fillStyle = 'white';
+                ctx.fillText('INVENTORY (tap to switch)', startX, startY - 5);
+
+                requestAnimationFrame(gameLoop);
+            }
+
+            restartButton.addEventListener('click', () => {
+                player.worldX = canvas.width / 2;
+                player.worldY = canvas.height / 2;
+                player.health = player.maxHealth;
+                player.isDead = false;
+                cameraOffsetX = 0; cameraOffsetY = 0;
+                recoilVelX = 0; recoilVelY = 0;
+                dashActive = false; dashTimer = 0; cooldownTimer = 0;
+                enemies.length = 0;
+                playerBullets.length = 0;
+                enemyBullets.length = 0;
+                smokeClouds.length = 0;
+                grenades.length = 0;
+                daggerSkillExplosionQueue.length = 0;
+                daggerSkillExplosions.length = 0;
+                daggerSkillIndicators.length = 0;
+                daggerDashing = false;
+                daggerSkillDashActive = false;
+                spraySkillActive = false;
+                spraySkillDashBackward = false;
+                spraySkillBulletsLeft = 0;
+                floorItems.length = 0;
+                currentWeapon = null;
+                shootBaseEl.style.display = 'none';
+                shootThumbEl.style.display = 'none';
+                skillBaseEl.style.display = 'none';
+                skillThumbEl.style.display = 'none';
+                floorItems.push({
+                    worldX: player.worldX,
+                    worldY: player.worldY,
+                    radius: 15,
+                    active: true,
+                    type: 'pistol'
+                });
+                waveNumber = 0;
+                spawnTimer = 0;
+                lastDamageTime = performance.now() / 1000;
+                deathScreen.style.display = 'none';
+            });
+
+            shootBaseEl.style.display = 'none';
+            shootThumbEl.style.display = 'none';
+            skillBaseEl.style.display = 'none';
+            skillThumbEl.style.display = 'none';
+            updateDashUI();
+            setEasyMode(false); // initial easy mode off
             requestAnimationFrame(gameLoop);
-        }
-
-        // initial pistol drop
-        floorItems.push({ worldX:player.worldX, worldY:player.worldY, radius:15, active:true, type:'pistol' });
-        setEasyMode(false);
-        updateUI();
-        requestAnimationFrame(gameLoop);
-    })();
-</script>
+        })();
+    </script>
 </body>
 </html>
