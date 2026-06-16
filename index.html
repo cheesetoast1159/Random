@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Infinite Plane | Fixed Ammo + Regen + Easy Mode</title>
+    <title>Infinite Plane | Magazine Reload Fix, Gentle Waves & More</title>
     <style>
         body {
             margin: 0; overflow: hidden; background: #1a1a1a; touch-action: none; font-family: sans-serif;
@@ -61,18 +61,6 @@
         #deathScreen button {
             margin-top: 20px; padding: 12px 24px; font-size: 1.2rem; cursor: pointer;
         }
-        .easy-toggle {
-            position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.6); color: #ffd966;
-            padding: 8px 18px; border-radius: 40px; font-weight: bold; font-family: monospace;
-            cursor: pointer; z-index: 150; border: 2px solid #ffb347; backdrop-filter: blur(4px);
-            font-size: 0.9rem;
-        }
-        .easy-toggle.active { background: #4caf50; color: white; border-color: white; }
-        .regen-status {
-            position: fixed; top: 20px; left: 20px; background: rgba(0,0,0,0.5);
-            padding: 4px 12px; border-radius: 20px; color: #aaffdd; font-size: 0.8rem;
-            font-family: monospace; pointer-events: none; z-index: 99;
-        }
     </style>
 </head>
 <body>
@@ -89,8 +77,6 @@
         <div>YOU DIED</div>
         <button id="restartButton">RESTART</button>
     </div>
-    <div id="easyToggle" class="easy-toggle">🔘 EASY MODE: OFF</div>
-    <div id="regenStatus" class="regen-status">❤️ REGEN: --</div>
 
     <script>
         (function() {
@@ -106,8 +92,6 @@
             const shootThumbEl = document.getElementById('shootThumb');
             const skillBaseEl = document.getElementById('skillBase');
             const skillThumbEl = document.getElementById('skillThumb');
-            const easyToggle = document.getElementById('easyToggle');
-            const regenSpan = document.getElementById('regenStatus');
 
             // --- Canvas resize ---
             function resizeCanvas() {
@@ -132,11 +116,6 @@
                 isDead: false
             };
 
-            // --- HEALTH REGEN (5 sec no damage) ---
-            let lastDamageTime = performance.now() / 1000;
-            const REGEN_DELAY = 5.0;
-            const REGEN_RATE = 12;
-
             // --- Dash (movement ability) – buffed speed + invulnerability ---
             const dashDuration = 0.25;
             const maxDashSpeed = 1200;
@@ -150,12 +129,11 @@
             const inventory = [null, null, null, null];
             let currentWeapon = null;
 
-            // FIXED AMMO: spare = maxAmmo * 6
-            const pistolState = { ammo: 12, maxAmmo: 12, spare: 72, reloadTime: 1.2, fireRate: 0.45, bulletSpeed: 600, damage: 10 };
-            const shotgunState = { ammo: 8, maxAmmo: 8, spare: 48, reloadTime: 1.8, pellets: 8, spreadAngle: Math.PI / 9, bulletSpeed: 500, damage: 8, recoilForce: 400 };
-            const sniperState = { ammo: 5, maxAmmo: 5, spare: 30, reloadTime: 2.0, fireRate: 1.5, bulletSpeed: 6000, damage: 70, recoilForce: 600 };
+            const pistolState = { ammo: 12, maxAmmo: 12, spare: 20, reloadTime: 1.2, fireRate: 0.45, bulletSpeed: 600, damage: 10 };
+            const shotgunState = { ammo: 8, maxAmmo: 8, spare: 20, reloadTime: 1.8, pellets: 8, spreadAngle: Math.PI / 9, bulletSpeed: 500, damage: 8, recoilForce: 400 };
+            const sniperState = { ammo: 5, maxAmmo: 5, spare: 10, reloadTime: 2.0, fireRate: 1.5, bulletSpeed: 6000, damage: 70, recoilForce: 600 };
             const daggerState = { damage: 25, dashDistance: 120, dashDuration: 0.12, cooldown: 0.7 };
-            const sprayState = { ammo: 30, maxAmmo: 30, spare: 180, reloadTime: 1.5, burstCount: 3, burstFireRate: 0.06, burstCooldown: 0.25, bulletSpeed: 550, damage: 6, spread: 0.15 };
+            const sprayState = { ammo: 30, maxAmmo: 30, spare: 5, reloadTime: 1.5, burstCount: 3, burstFireRate: 0.06, burstCooldown: 0.25, bulletSpeed: 550, damage: 6, spread: 0.15 };
 
             let isReloading = false, reloadTimer = 0;
             let lastFireTime = 0;
@@ -230,38 +208,13 @@
             const SNIPER_OSCILLATION_SPEED = 2.5;
             let screenShake = 0, shakeDuration = 0, skillFlashAlpha = 0;
 
-            // --- Spawn control (global enemy cap = 8) ---
+            // --- Spawn control (gentle first wave) ---
             let spawnTimer = 0;
             const SPAWN_INTERVAL = 4.0;
             let waveNumber = 0;
             const ENEMY_TYPES = ['pistol', 'sword', 'spray', 'gang', 'shotgun', 'sniper'];
-            const MAX_ENEMIES_ALIVE = 8;
 
-            // --- Easy Mode ---
-            let easyMode = false;
-            const BASE_ENEMY_HEALTH = {
-                pistol: 40, sword: 60, spray: 50, gang: 20, shotgun: 50, sniper: 30
-            };
-            function applyEasyModeHealth(enemy) {
-                if (!enemy.type) return;
-                let base = BASE_ENEMY_HEALTH[enemy.type] || 30;
-                if (easyMode) enemy.health = Math.max(1, Math.floor(base * 0.4));
-                else enemy.health = base;
-            }
-            function setEasyMode(val) {
-                easyMode = val;
-                if (easyMode) {
-                    easyToggle.innerText = '🌟 EASY MODE: ON';
-                    easyToggle.classList.add('active');
-                } else {
-                    easyToggle.innerText = '🔘 EASY MODE: OFF';
-                    easyToggle.classList.remove('active');
-                }
-                for (let e of enemies) applyEasyModeHealth(e);
-            }
-            easyToggle.addEventListener('click', () => setEasyMode(!easyMode));
-
-            // ========== Joystick helpers (original) ==========
+            // ========== Joystick helpers ==========
             let movePointerId = null, moveBaseCenter = { x:0, y:0 }, moveMaxDist = 0;
             let moveVec = { x:0, y:0 };
             let shootPointerId = null, shootBaseCenter = { x:0, y:0 }, shootMaxDist = 0;
@@ -343,7 +296,7 @@
             updateMoveBase(); updateShootBase(); updateSkillBase();
             window.addEventListener('resize', () => { updateMoveBase(); updateShootBase(); updateSkillBase(); });
 
-            // Joystick events (original)
+            // ========== Joystick events ==========
             moveBaseEl.addEventListener('pointerdown', (e) => {
                 if (e.target === moveBaseEl && movePointerId === null && !player.isDead) {
                     e.preventDefault();
@@ -447,7 +400,7 @@
                 }
             });
 
-            // ========== Dash ==========
+            // ========== Dash (movement ability) ==========
             function updateDashUI() {
                 if (cooldownTimer > 0) { dashButton.textContent = 'COOLING...'; dashButton.classList.add('disabled'); }
                 else if (dashActive) { dashButton.textContent = 'DASHING!'; dashButton.classList.add('disabled'); }
@@ -465,7 +418,7 @@
             dashButton.addEventListener('pointerdown', (e) => { e.preventDefault(); triggerDash(); });
             dashButton.addEventListener('touchstart', (e) => { e.preventDefault(); triggerDash(); });
 
-            // ========== Pickup with full inventory replacement (drop current weapon) ==========
+            // ========== Pickup ==========
             pickupButton.addEventListener('pointerdown', (e) => { e.preventDefault(); handlePickup(); });
             pickupButton.addEventListener('touchstart', (e) => { e.preventDefault(); handlePickup(); });
 
@@ -480,26 +433,9 @@
             }
 
             function pickupWeapon(item) {
-                const allFilled = inventory.every(slot => slot !== null);
-                if (allFilled && currentWeapon) {
-                    // drop current weapon at feet
-                    floorItems.push({ worldX: player.worldX, worldY: player.worldY, radius: 15, active: true, type: currentWeapon });
-                    const slotIndex = inventory.findIndex(slot => slot && slot.name === currentWeapon);
-                    if (slotIndex !== -1) {
-                        const iconMap = { pistol:'🔫', shotgun:'🖖', sniper:'🔭', dagger:'🗡️', spray:'💥' };
-                        inventory[slotIndex] = { name: item.type, icon: iconMap[item.type] };
-                        equipWeapon(item.type);
-                    }
-                    item.active = false;
-                    shootBaseEl.style.display = 'block';
-                    shootThumbEl.style.display = 'block';
-                    updateShootBase();
-                    pickupButton.style.display = 'none';
-                    return;
-                }
                 const slot = inventory.findIndex(s => !s);
                 if (slot === -1) return;
-                const iconMap = { pistol:'🔫', shotgun:'🖖', sniper:'🔭', dagger:'🗡️', spray:'💥' };
+                const iconMap = { pistol: '🔫', shotgun: '🖖', sniper: '🔭', dagger: '🗡️', spray: '💥' };
                 inventory[slot] = { name: item.type, icon: iconMap[item.type] };
                 item.active = false;
                 if (currentWeapon !== item.type) equipWeapon(item.type);
@@ -554,31 +490,32 @@
                 pickupButton.style.display = near ? 'block' : 'none';
             }
 
-            // ========== RELOAD (fixed: transfers individual bullets) ==========
+            // ========== Reload (magazine‑based for all weapons) ==========
             function startReload() {
                 if (isReloading || currentWeapon === 'dagger') return;
                 let state;
-                if (currentWeapon === 'spray') state = sprayState;
-                else state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
+                if (currentWeapon === 'spray') {
+                    state = sprayState;
+                } else {
+                    state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
+                }
+                // Only reload if not already full and we have spare magazines
                 if (state.ammo >= state.maxAmmo || state.spare <= 0) return;
                 isReloading = true;
                 reloadTimer = state.reloadTime;
             }
             function finishReload() {
                 if (currentWeapon === 'spray') {
-                    const state = sprayState;
-                    if (state.spare > 0) {
-                        const needed = state.maxAmmo - state.ammo;
-                        const take = Math.min(needed, state.spare);
-                        state.ammo += take;
-                        state.spare -= take;
+                    if (sprayState.spare > 0) {
+                        sprayState.ammo = sprayState.maxAmmo;
+                        sprayState.spare--;
                     }
-                } else {
+                } else if (currentWeapon !== 'dagger') {
                     const state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
-                    const needed = state.maxAmmo - state.ammo;
-                    const take = Math.min(needed, state.spare);
-                    state.ammo += take;
-                    state.spare -= take;
+                    if (state.spare > 0) {
+                        state.ammo = state.maxAmmo;
+                        state.spare--;
+                    }
                 }
                 isReloading = false;
             }
@@ -649,14 +586,14 @@
             }
 
             // ========== Firing ==========
-            function firePistol(now, dirX, dirY) {
+            function firePistol(now) {
                 const state = pistolState;
-                if (isReloading || state.ammo <= 0 || player.isDead) { if (state.ammo === 0 && !isReloading) startReload(); return false; }
+                if (isReloading || state.ammo <= 0 || player.isDead) { if (state.ammo === 0) startReload(); return false; }
                 if (now - lastFireTime < state.fireRate * 1000) return false;
-                if (dirX === 0 && dirY === 0) return false;
-                const mag = Math.hypot(dirX, dirY);
-                const vx = (dirX / mag) * state.bulletSpeed;
-                const vy = (dirY / mag) * state.bulletSpeed;
+                if (shootVec.x === 0 && shootVec.y === 0) return false;
+                const mag = Math.hypot(shootVec.x, shootVec.y);
+                const vx = (shootVec.x / mag) * state.bulletSpeed;
+                const vy = (shootVec.y / mag) * state.bulletSpeed;
                 playerBullets.push({ worldX: player.worldX, worldY: player.worldY, vx, vy, radius: 5, damage: state.damage, isBeam: false, sourceWeapon: 'pistol' });
                 state.ammo--;
                 lastFireTime = now;
@@ -666,7 +603,7 @@
             }
             function fireShotgun() {
                 const state = shotgunState;
-                if (isReloading || state.ammo <= 0 || player.isDead) { if (state.ammo === 0 && !isReloading) startReload(); return; }
+                if (isReloading || state.ammo <= 0 || player.isDead) { if (state.ammo === 0) startReload(); return; }
                 const mag = Math.hypot(shootVec.x, shootVec.y);
                 const dirX = shootVec.x / mag, dirY = shootVec.y / mag;
                 for (let i = 0; i < state.pellets; i++) {
@@ -682,7 +619,7 @@
             }
             function fireSniper() {
                 const state = sniperState;
-                if (isReloading || state.ammo <= 0 || player.isDead) { if (state.ammo === 0 && !isReloading) startReload(); return; }
+                if (isReloading || state.ammo <= 0 || player.isDead) { if (state.ammo === 0) startReload(); return; }
                 const mag = Math.hypot(shootVec.x, shootVec.y);
                 const baseAngle = Math.atan2(shootVec.y, shootVec.x);
                 const fireAngle = baseAngle + sniperAimAngle;
@@ -728,14 +665,11 @@
                 skillCooldown = skillCooldownDuration;
             }
 
-            // ========== Enemy spawning with global cap (max 8) ==========
+            // ========== Enemy spawning (scaling waves) ==========
             function spawnWave() {
-                if (enemies.length >= MAX_ENEMIES_ALIVE) return;
                 waveNumber++;
-                let rawCount = Math.min(1 + Math.floor((waveNumber - 1) / 2), 6);
-                let slotsFree = MAX_ENEMIES_ALIVE - enemies.length;
-                let toSpawn = Math.min(rawCount, slotsFree);
-                for (let i = 0; i < toSpawn; i++) {
+                const count = Math.min(1 + Math.floor((waveNumber - 1) / 2), 6);
+                for (let i = 0; i < count; i++) {
                     const type = ENEMY_TYPES[Math.floor(Math.random() * ENEMY_TYPES.length)];
                     const angle = Math.random() * Math.PI * 2;
                     const dist = 400 + Math.random() * 300;
@@ -803,7 +737,6 @@
                         visionRange: 600, drop: 'sniper'
                     };
                 }
-                applyEasyModeHealth(enemy);
                 enemies.push(enemy);
             }
 
@@ -832,7 +765,7 @@
                 return false;
             }
 
-            // ========== Enemy AI (original, full) ==========
+            // ========== Enemy AI (invulnerability + range check) ==========
             function updateEnemies(now, dt) {
                 const gangMembers = enemies.filter(e => e.type === 'gang');
                 const gangAllAlive = gangMembers.length === 3;
@@ -908,7 +841,6 @@
                             const angle = Math.atan2(dy, dx);
                             recoilVelX -= Math.cos(angle) * 200;
                             recoilVelY -= Math.sin(angle) * 200;
-                            lastDamageTime = performance.now() / 1000;
                             if (player.health <= 0) {
                                 player.health = 0;
                                 player.isDead = true;
@@ -988,7 +920,6 @@
                                 const angle = Math.atan2(dy, dx);
                                 recoilVelX -= Math.cos(angle) * 150;
                                 recoilVelY -= Math.sin(angle) * 150;
-                                lastDamageTime = performance.now() / 1000;
                                 if (player.health <= 0) {
                                     player.health = 0;
                                     player.isDead = true;
@@ -1051,7 +982,7 @@
                 }
             }
 
-            // ========== Game loop (original) with health regen added ==========
+            // ========== Game loop ==========
             let lastTime = performance.now();
             function gameLoop(now) {
                 let dt = (now - lastTime) / 1000;
@@ -1064,20 +995,7 @@
                     return;
                 }
 
-                // Health regen
-                const nowSec = now / 1000;
-                const timeSinceDamage = nowSec - lastDamageTime;
-                if (timeSinceDamage >= REGEN_DELAY && player.health < player.maxHealth) {
-                    let heal = REGEN_RATE * dt;
-                    player.health = Math.min(player.maxHealth, player.health + heal);
-                    regenSpan.innerHTML = `❤️ REGEN: ACTIVE +${Math.floor(heal)}`;
-                } else if (timeSinceDamage < REGEN_DELAY) {
-                    regenSpan.innerHTML = `❤️ REGEN: WAIT ${(REGEN_DELAY - timeSinceDamage).toFixed(1)}s`;
-                } else {
-                    regenSpan.innerHTML = `❤️ REGEN: FULL`;
-                }
-
-                // Auto-spawn with cap
+                // Auto-spawn
                 spawnTimer += dt;
                 if (spawnTimer >= SPAWN_INTERVAL) {
                     spawnTimer = 0;
@@ -1310,37 +1228,9 @@
                     sprayNextBurstTime = now + state.burstCooldown * 1000;
                 }
 
-                // Pistol auto-fire with aim assist
+                // Pistol auto-fire
                 if (currentWeapon === 'pistol' && shootActive && !daggerDashing && !daggerSkillDashActive && !spraySkillDashBackward) {
-                    let aimDirX = shootVec.x, aimDirY = shootVec.y;
-                    if (aimDirX !== 0 || aimDirY !== 0) {
-                        const rawAngle = Math.atan2(aimDirY, aimDirX);
-                        let bestEnemy = null;
-                        let bestAngleDiff = Infinity;
-                        const aimAssistAngle = Math.PI / 12;
-                        const aimAssistRange = 350;
-                        for (const enemy of enemies) {
-                            const dx = enemy.worldX - player.worldX;
-                            const dy = enemy.worldY - player.worldY;
-                            const dist = Math.hypot(dx, dy);
-                            if (dist > aimAssistRange) continue;
-                            const angleToEnemy = Math.atan2(dy, dx);
-                            let angleDiff = Math.abs(angleToEnemy - rawAngle);
-                            if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
-                            if (angleDiff < aimAssistAngle && angleDiff < bestAngleDiff) {
-                                bestAngleDiff = angleDiff;
-                                bestEnemy = enemy;
-                            }
-                        }
-                        if (bestEnemy) {
-                            aimDirX = bestEnemy.worldX - player.worldX;
-                            aimDirY = bestEnemy.worldY - player.worldY;
-                            const mag = Math.hypot(aimDirX, aimDirY);
-                            aimDirX /= mag;
-                            aimDirY /= mag;
-                        }
-                    }
-                    firePistol(now, aimDirX, aimDirY);
+                    firePistol(now);
                 }
 
                 updateEnemies(now, dt);
@@ -1391,7 +1281,6 @@
                         if (Math.hypot(b.worldX - player.worldX, b.worldY - player.worldY) < player.radius + b.radius) {
                             player.health -= b.damage;
                             enemyBullets.splice(i, 1);
-                            lastDamageTime = now / 1000;
                             if (player.health <= 0) { player.health = 0; player.isDead = true; deathScreen.style.display = 'flex'; }
                         }
                     }
@@ -1413,7 +1302,7 @@
 
                 checkPickupProximity();
 
-                // --- Draw (full original drawing) ---
+                // --- Draw ---
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.save();
 
@@ -1608,7 +1497,7 @@
                         }
                     }
                     const eBarW = enemy.radius*2, eBarH = 4;
-                    const maxHp = easyMode ? Math.floor((BASE_ENEMY_HEALTH[enemy.type]||30)*0.4) : (BASE_ENEMY_HEALTH[enemy.type]||30);
+                    const maxHp = enemy.type === 'pistol' ? 40 : (enemy.type === 'sword' ? 60 : (enemy.type === 'spray' ? 50 : (enemy.type === 'gang' ? 20 : (enemy.type === 'shotgun' ? 50 : 30))));
                     const eHpPct = enemy.health / maxHp;
                     ctx.fillStyle = '#333';
                     ctx.fillRect(s.x - eBarW/2 -1, s.y - enemy.radius -8 -1, eBarW+2, eBarH+2);
@@ -1707,14 +1596,11 @@
                     let ammoText = '';
                     if (currentWeapon === 'dagger') {
                         ammoText = `Dagger (basic ${daggerCooldown > 0 ? 'CD '+Math.ceil(daggerCooldown) : 'ready'}, skill ${skillCooldown > 0 ? 'CD '+Math.ceil(skillCooldown) : 'ready'})`;
-                    } else if (currentWeapon === 'spray') {
-                        ammoText = `Spray: ${sprayState.ammo}/${sprayState.maxAmmo} | spares: ${sprayState.spare}`;
-                        if (isReloading) ammoText += ' RELOADING...';
-                        ammoText += ` (skill ${skillCooldown > 0 ? 'CD '+Math.ceil(skillCooldown) : 'ready'})`;
                     } else {
-                        const state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
-                        ammoText = `${currentWeapon}: ${state.ammo}/${state.maxAmmo} | spares: ${state.spare}`;
+                        const state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : (currentWeapon === 'sniper' ? sniperState : sprayState));
+                        ammoText = `${state.ammo}/${state.maxAmmo} | mags: ${state.spare}`;
                         if (isReloading) ammoText += ' RELOADING...';
+                        if (currentWeapon === 'spray') ammoText += ` (skill ${skillCooldown > 0 ? 'CD '+Math.ceil(skillCooldown) : 'ready'})`;
                     }
                     ctx.font = 'bold 16px monospace'; ctx.fillStyle = '#ffc107';
                     ctx.shadowColor = 'black'; ctx.shadowBlur = 4;
@@ -1782,7 +1668,6 @@
                 });
                 waveNumber = 0;
                 spawnTimer = 0;
-                lastDamageTime = performance.now() / 1000;
                 deathScreen.style.display = 'none';
             });
 
@@ -1791,7 +1676,6 @@
             skillBaseEl.style.display = 'none';
             skillThumbEl.style.display = 'none';
             updateDashUI();
-            setEasyMode(false);
             requestAnimationFrame(gameLoop);
         })();
     </script>
