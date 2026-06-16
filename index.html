@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Infinite Plane | Magazine Reload Fix, Gentle Waves & More</title>
+    <title>Infinite Plane | Enemy Limit, Pistol Homing & More</title>
     <style>
         body {
             margin: 0; overflow: hidden; background: #1a1a1a; touch-action: none; font-family: sans-serif;
@@ -208,7 +208,8 @@
             const SNIPER_OSCILLATION_SPEED = 2.5;
             let screenShake = 0, shakeDuration = 0, skillFlashAlpha = 0;
 
-            // --- Spawn control (gentle first wave) ---
+            // --- Spawn control (gentle first wave + enemy limit) ---
+            const MAX_ENEMIES = 8;  // maximum enemies on field
             let spawnTimer = 0;
             const SPAWN_INTERVAL = 4.0;
             let waveNumber = 0;
@@ -499,7 +500,6 @@
                 } else {
                     state = currentWeapon === 'pistol' ? pistolState : (currentWeapon === 'shotgun' ? shotgunState : sniperState);
                 }
-                // Only reload if not already full and we have spare magazines
                 if (state.ammo >= state.maxAmmo || state.spare <= 0) return;
                 isReloading = true;
                 reloadTimer = state.reloadTime;
@@ -665,11 +665,16 @@
                 skillCooldown = skillCooldownDuration;
             }
 
-            // ========== Enemy spawning (scaling waves) ==========
+            // ========== Enemy spawning (scaling waves + enemy limit) ==========
             function spawnWave() {
+                // Limit enemies
+                if (enemies.length >= MAX_ENEMIES) {
+                    return; // don't spawn
+                }
                 waveNumber++;
                 const count = Math.min(1 + Math.floor((waveNumber - 1) / 2), 6);
                 for (let i = 0; i < count; i++) {
+                    if (enemies.length >= MAX_ENEMIES) break; // stop if we hit limit during wave
                     const type = ENEMY_TYPES[Math.floor(Math.random() * ENEMY_TYPES.length)];
                     const angle = Math.random() * Math.PI * 2;
                     const dist = 400 + Math.random() * 300;
@@ -995,11 +1000,13 @@
                     return;
                 }
 
-                // Auto-spawn
+                // Auto-spawn (only if under limit)
                 spawnTimer += dt;
                 if (spawnTimer >= SPAWN_INTERVAL) {
                     spawnTimer = 0;
-                    spawnWave();
+                    if (enemies.length < MAX_ENEMIES) {
+                        spawnWave();
+                    }
                 }
 
                 // Dash timers
@@ -1235,10 +1242,58 @@
 
                 updateEnemies(now, dt);
 
-                // Player bullets collisions
+                // --- Player bullets update (with homing for pistol) ---
+                for (const b of playerBullets) {
+                    // Homing for pistol bullets only
+                    if (b.sourceWeapon === 'pistol') {
+                        if (enemies.length > 0) {
+                            // Find nearest enemy to this bullet
+                            let nearestDist = Infinity;
+                            let nearestEnemy = null;
+                            for (const e of enemies) {
+                                const d = Math.hypot(b.worldX - e.worldX, b.worldY - e.worldY);
+                                if (d < nearestDist) {
+                                    nearestDist = d;
+                                    nearestEnemy = e;
+                                }
+                            }
+                            // Only home if within reasonable range (300 pixels)
+                            const homingRange = 300;
+                            if (nearestEnemy && nearestDist < homingRange) {
+                                const dx = nearestEnemy.worldX - b.worldX;
+                                const dy = nearestEnemy.worldY - b.worldY;
+                                const distToEnemy = Math.hypot(dx, dy);
+                                if (distToEnemy > 0) {
+                                    const dirX = dx / distToEnemy;
+                                    const dirY = dy / distToEnemy;
+                                    // Current velocity magnitude
+                                    const speed = Math.hypot(b.vx, b.vy);
+                                    // Gradually steer velocity toward enemy
+                                    const homingStrength = 2.5; // radians per second
+                                    const turnAmount = homingStrength * dt;
+                                    // Compute current angle and target angle
+                                    const currentAngle = Math.atan2(b.vy, b.vx);
+                                    let targetAngle = Math.atan2(dirY, dirX);
+                                    // Find shortest angular difference
+                                    let angleDiff = targetAngle - currentAngle;
+                                    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                                    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                                    // Clamp the turn
+                                    const newAngle = currentAngle + Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), turnAmount);
+                                    b.vx = Math.cos(newAngle) * speed;
+                                    b.vy = Math.sin(newAngle) * speed;
+                                }
+                            }
+                        }
+                    }
+                    // Move bullet
+                    b.worldX += b.vx * dt;
+                    b.worldY += b.vy * dt;
+                }
+
+                // Player bullets collisions (unchanged)
                 for (let i = playerBullets.length - 1; i >= 0; i--) {
                     const b = playerBullets[i];
-                    b.worldX += b.vx * dt; b.worldY += b.vy * dt;
                     let remove = false;
                     for (const house of houses) {
                         for (const rect of house) {
@@ -1264,45 +1319,29 @@
                 }
 
                 // Enemy bullets vs player (invulnerable check)
-                const playerInvul = dashActive || daggerDashing || daggerSkillDashActive || spraySkillDashBackward;
-                if (!playerInvul) {
-                    for (let i = enemyBullets.length - 1; i >= 0; i--) {
-                        const b = enemyBullets[i];
-                        b.worldX += b.vx * dt; b.worldY += b.vy * dt;
-                        let remove = false;
-                        for (const house of houses) {
-                            for (const rect of house) {
-                                if (b.worldX > rect.x - b.radius && b.worldX < rect.x + rect.w + b.radius &&
-                                    b.worldY > rect.y - b.radius && b.worldY < rect.y + rect.h + b.radius) { remove = true; break; }
-                            }
-                            if (remove) break;
+                for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                    const b = enemyBullets[i];
+                    b.worldX += b.vx * dt; b.worldY += b.vy * dt;
+                    let remove = false;
+                    for (const house of houses) {
+                        for (const rect of house) {
+                            if (b.worldX > rect.x - b.radius && b.worldX < rect.x + rect.w + b.radius &&
+                                b.worldY > rect.y - b.radius && b.worldY < rect.y + rect.h + b.radius) { remove = true; break; }
                         }
-                        if (remove) { enemyBullets.splice(i, 1); continue; }
-                        if (Math.hypot(b.worldX - player.worldX, b.worldY - player.worldY) < player.radius + b.radius) {
-                            player.health -= b.damage;
-                            enemyBullets.splice(i, 1);
-                            if (player.health <= 0) { player.health = 0; player.isDead = true; deathScreen.style.display = 'flex'; }
-                        }
+                        if (remove) break;
                     }
-                } else {
-                    for (let i = enemyBullets.length - 1; i >= 0; i--) {
-                        const b = enemyBullets[i];
-                        b.worldX += b.vx * dt; b.worldY += b.vy * dt;
-                        let remove = false;
-                        for (const house of houses) {
-                            for (const rect of house) {
-                                if (b.worldX > rect.x - b.radius && b.worldX < rect.x + rect.w + b.radius &&
-                                    b.worldY > rect.y - b.radius && b.worldY < rect.y + rect.h + b.radius) { remove = true; break; }
-                            }
-                            if (remove) break;
-                        }
-                        if (remove) enemyBullets.splice(i, 1);
+                    if (remove) { enemyBullets.splice(i, 1); continue; }
+                    const playerInvul = dashActive || daggerDashing || daggerSkillDashActive || spraySkillDashBackward;
+                    if (!playerInvul && Math.hypot(b.worldX - player.worldX, b.worldY - player.worldY) < player.radius + b.radius) {
+                        player.health -= b.damage;
+                        enemyBullets.splice(i, 1);
+                        if (player.health <= 0) { player.health = 0; player.isDead = true; deathScreen.style.display = 'flex'; }
                     }
                 }
 
                 checkPickupProximity();
 
-                // --- Draw ---
+                // --- Draw --- (unchanged)
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.save();
 
@@ -1535,6 +1574,7 @@
                 if (shootActive && (shootVec.x !== 0 || shootVec.y !== 0)) weaponAngle = Math.atan2(shootVec.y, shootVec.x);
                 else if (moveVec.x !== 0 || moveVec.y !== 0) weaponAngle = Math.atan2(moveVec.y, moveVec.x);
                 ctx.beginPath(); ctx.arc(playerScreen.x, playerScreen.y, player.radius, 0, Math.PI*2);
+                const playerInvul = dashActive || daggerDashing || daggerSkillDashActive || spraySkillDashBackward;
                 ctx.fillStyle = dashActive ? '#e63946' : (playerInvul ? '#aaa' : '#F4A261');
                 ctx.fill();
                 ctx.strokeStyle = dashActive ? '#fff' : '#E76F51'; ctx.lineWidth = 3; ctx.stroke();
